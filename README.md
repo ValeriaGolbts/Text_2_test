@@ -7,8 +7,11 @@ Text_2_test/
 
 ├── src/generator/ # Модуль работы с GigaChat
 │ 
+
 ├── src/shared/ # Общие утилиты
-│ 
+│
+
 ├── tests/ # Тесты
-│ 
+│
+
 └── requirements.txt # Зависимости Python
