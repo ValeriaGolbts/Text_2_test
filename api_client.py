@@ -49,7 +49,11 @@ class GigaChatAPIClient:
         logger.debug(f"Параметры: model={payload['model']}, tokens={payload['max_tokens']}")
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            # Ключевое изменение: verify=False отключает проверку SSL
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                verify=False  # ← ОТКЛЮЧАЕМ ПРОВЕРКУ SSL
+            ) as client:
                 response = await client.post(
                     self.chat_url,
                     json=payload,
@@ -77,12 +81,10 @@ class GigaChatAPIClient:
     async def check_availability(self) -> bool:
         """Проверяет доступность API и валидность ключа"""
         try:
-            test_payload = {
-                "model": config.GIGACHAT_MODEL,
-                "messages": [{"role": "user", "content": "test"}],
-                "max_tokens": 5
-            }
-            await self.send_request(**test_payload)
+            # Важно: правильный формат вызова
+            test_messages = [{"role": "user", "content": "test"}]
+            await self.send_request(messages=test_messages, max_tokens=5)
             return True
-        except:
+        except Exception as e:
+            logger.error(f"Ошибка при проверке доступности: {str(e)}")
             return False
