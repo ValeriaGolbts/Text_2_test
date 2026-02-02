@@ -1,10 +1,10 @@
 # Принимает TestRequest -> возвращает TestResponse.
 import logging
 from typing import Optional
-from .api_client import GigaChatAPIClient
-from .prompt_builder import PromptBuilder
-from .response_parser import ResponseParser
-from .schemas import TestRequest, TestResponse
+from api_client import GigaChatAPIClient
+from prompt_builder import PromptBuilder
+from response_parser import ResponseParser
+from schemas import TestRequest, TestResponse
 
 logger = logging.getLogger(__name__)
 
