@@ -14,6 +14,8 @@ class GigaChatConfig(BaseSettings):
     GIGACHAT_MAX_TOKENS: int = 4000          # ← ЕСТЬ в .env
     GIGACHAT_TEMPERATURE: float = 0.7        # ← ЕСТЬ в .env
     
+    GIGACHAT_SCOPE: str = "GIGACHAT_API_B2B"  # ← ДЛЯ B2B ТАРИФА!
+    
     # 2. Поля без префикса GIGACHAT_ (настройки проекта)
     DEFAULT_QUESTIONS_COUNT: int = 10        # ← ЕСТЬ в .env
     DEFAULT_DIFFICULTY: str = "medium"       # ← ЕСТЬ в .env
