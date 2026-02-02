@@ -2,7 +2,7 @@
 import json
 import logging
 from typing import Dict, Any
-from .schemas import TestResponse, Question
+from schemas import TestResponse, Question
 
 logger = logging.getLogger(__name__)
 
