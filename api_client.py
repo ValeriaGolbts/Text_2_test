@@ -10,9 +10,9 @@ class GigaChatAPIClient:
     """Минималистичный клиент для GigaChat API"""
     
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or config.api_key
-        self.base_url = config.base_url
-        self.timeout = config.timeout
+        self.api_key = api_key or config.GIGACHAT_API_KEY
+        self.base_url = config.GIGACHAT_BASE_URL
+        self.timeout = config.GIGACHAT_TIMEOUT
         self.chat_url = f"{self.base_url}/chat/completions"
         
     async def send_request(self, messages: list, **kwargs) -> Dict[str, Any]:
@@ -32,11 +32,10 @@ class GigaChatAPIClient:
         
         # Формируем тело запроса
         payload = {
-            "model": kwargs.get("model", config.model),
+            "model": kwargs.get("model", config.GIGACHAT_MODEL),
             "messages": messages,
-            "max_tokens": kwargs.get("max_tokens", config.max_tokens),
-            "temperature": kwargs.get("temperature", config.temperature),
-            "top_p": kwargs.get("top_p", config.top_p),
+            "max_tokens": kwargs.get("max_tokens", config.GIGACHAT_MAX_TOKENS),
+            "temperature": kwargs.get("temperature", config.GIGACHAT_TEMPERATURE),
         }
         
         # Заголовки
@@ -79,7 +78,7 @@ class GigaChatAPIClient:
         """Проверяет доступность API и валидность ключа"""
         try:
             test_payload = {
-                "model": config.model,
+                "model": config.GIGACHAT_MODEL,
                 "messages": [{"role": "user", "content": "test"}],
                 "max_tokens": 5
             }
