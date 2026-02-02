@@ -1,11 +1,14 @@
-# Модуль для генерации тестов с использованием GigaChat API.
+from gigachat_client import GigaChatAPIClient  
 from test_generator import TestGenerator
 from schemas import TestRequest, TestResponse, Question, QuestionType
+from config import config
 
 __all__ = [
-    'TestGenerator',      # Главный класс
-    'TestRequest',        # Модель запроса (что принимаем)
-    'TestResponse',       # Модель ответа (что возвращаем)
-    'Question',           # Модель вопроса
-    'QuestionType',       # Типы вопросов
+    'GigaChatAPIClient',
+    'TestGenerator',
+    'TestRequest',
+    'TestResponse', 
+    'Question',
+    'QuestionType',
+    'config',
 ]
