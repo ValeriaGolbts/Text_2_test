@@ -4,7 +4,8 @@ from typing import Optional
 from api_client import GigaChatAPIClient
 from prompt_builder import PromptBuilder
 from response_parser import ResponseParser
-from schemas import TestRequest, TestResponse
+from schemas import TestRequest, TestResponse, QuestionType
+from config import config
 
 logger = logging.getLogger(__name__)
 
