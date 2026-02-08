@@ -1,5 +1,6 @@
 # api_client_b2b.py - Специальный клиент для B2B тарифа
 import httpx
+import uuid  # ← ДОБАВИТЬ ЭТОТ ИМПОРТ
 import logging
 from typing import Dict, Any, Optional
 from config import config
@@ -16,6 +17,10 @@ class GigaChatB2BClient:
         self.timeout = config.GIGACHAT_TIMEOUT
         self.chat_url = f"{self.base_url}/chat/completions"
         
+        # Генерируем RqUID (ОБЯЗАТЕЛЬНО для B2B!)
+        self.rquid = str(uuid.uuid4())
+        logger.debug(f"Сгенерирован RqUID: {self.rquid}")
+        
         # Авторизуемся и получаем access token
         self.access_token = self._get_access_token()
         
@@ -26,7 +31,8 @@ class GigaChatB2BClient:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json"
+            "Accept": "application/json",
+            "RqUID": self.rquid  # ← ДОБАВИТЬ ЭТОТ ЗАГОЛОВОК!
         }
         
         data = {
@@ -49,6 +55,7 @@ class GigaChatB2BClient:
                     raise Exception(f"Auth Error {response.status_code}: {error_text}")
                 
                 token_data = response.json()
+                logger.debug(f"Токен получен, действует {token_data.get('expires_in', 'N/A')} сек")
                 return token_data["access_token"]
                 
         except Exception as e:
@@ -68,11 +75,13 @@ class GigaChatB2BClient:
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
-            "Accept": "application/json"
+            "Accept": "application/json",
+            "RqUID": self.rquid  # ← ДОБАВИТЬ И ЗДЕСЬ!
         }
         
         logger.debug(f"Отправка запроса к {self.chat_url}")
         logger.debug(f"Параметры: model={payload['model']}, tokens={payload['max_tokens']}")
+        logger.debug(f"RqUID: {self.rquid}")
         
         try:
             async with httpx.AsyncClient(
