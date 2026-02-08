@@ -1,6 +1,7 @@
-# api_client_b2b.py - Специальный клиент для B2B тарифа
+# api_client_b2b.py - Полная версия
 import httpx
-import uuid  # ← ДОБАВИТЬ ЭТОТ ИМПОРТ
+import uuid
+import json
 import logging
 from typing import Dict, Any, Optional
 from config import config
@@ -8,56 +9,52 @@ from config import config
 logger = logging.getLogger(__name__)
 
 class GigaChatB2BClient:
-    """Клиент для GigaChat API B2B тарифа"""
+    """Полноценный клиент для GigaChat API B2B тарифа"""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, scope: Optional[str] = None):
         self.api_key = api_key or config.GIGACHAT_API_KEY
-        self.scope = config.GIGACHAT_SCOPE
+        self.scope = scope or getattr(config, 'GIGACHAT_SCOPE', 'GIGACHAT_API_B2B')
         self.base_url = config.GIGACHAT_BASE_URL
         self.timeout = config.GIGACHAT_TIMEOUT
         self.chat_url = f"{self.base_url}/chat/completions"
         
-        # Генерируем RqUID (ОБЯЗАТЕЛЬНО для B2B!)
+        # Генерируем уникальный RqUID
         self.rquid = str(uuid.uuid4())
-        logger.debug(f"Сгенерирован RqUID: {self.rquid}")
+        logger.info(f"Инициализация B2B клиента с RqUID: {self.rquid}")
         
-        # Авторизуемся и получаем access token
+        # Получаем токен
         self.access_token = self._get_access_token()
-        
+    
     def _get_access_token(self) -> str:
-        """Получаем access token для B2B тарифа"""
+        """Получает access token"""
         auth_url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
         
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json",
-            "RqUID": self.rquid  # ← ДОБАВИТЬ ЭТОТ ЗАГОЛОВОК!
+            "RqUID": self.rquid
         }
         
-        data = {
-            "scope": self.scope
-        }
+        data = {"scope": self.scope}
         
         try:
-            # Отключаем SSL проверку для тестирования
-            with httpx.Client(verify=False) as client:
+            with httpx.Client(verify=False, timeout=self.timeout) as client:
                 response = client.post(
                     auth_url,
                     headers=headers,
-                    data=data,
-                    timeout=self.timeout
+                    data=data
                 )
                 
-                if response.status_code != 200:
-                    error_text = response.text[:200]
-                    logger.error(f"Auth Error {response.status_code}: {error_text}")
-                    raise Exception(f"Auth Error {response.status_code}: {error_text}")
-                
-                token_data = response.json()
-                logger.debug(f"Токен получен, действует {token_data.get('expires_in', 'N/A')} сек")
-                return token_data["access_token"]
-                
+                if response.status_code == 200:
+                    token_data = response.json()
+                    logger.info(f"Токен получен, действует {token_data.get('expires_in', 'N/A')} сек")
+                    return token_data["access_token"]
+                else:
+                    error_text = response.text
+                    logger.error(f"Ошибка авторизации {response.status_code}: {error_text[:200]}")
+                    raise Exception(f"Auth Error {response.status_code}")
+                    
         except Exception as e:
             logger.error(f"Ошибка при получении токена: {str(e)}")
             raise
@@ -76,17 +73,16 @@ class GigaChatB2BClient:
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "RqUID": self.rquid  # ← ДОБАВИТЬ И ЗДЕСЬ!
+            "RqUID": self.rquid
         }
         
-        logger.debug(f"Отправка запроса к {self.chat_url}")
-        logger.debug(f"Параметры: model={payload['model']}, tokens={payload['max_tokens']}")
+        logger.info(f"Отправка запроса к GigaChat")
         logger.debug(f"RqUID: {self.rquid}")
         
         try:
             async with httpx.AsyncClient(
                 timeout=self.timeout,
-                verify=False  # Отключаем SSL для тестирования
+                verify=False
             ) as client:
                 response = await client.post(
                     self.chat_url,
@@ -94,15 +90,18 @@ class GigaChatB2BClient:
                     headers=headers
                 )
                 
-                logger.debug(f"Статус ответа: {response.status_code}")
-                
-                if response.status_code != 200:
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info("Запрос успешен")
+                    return result
+                else:
                     error_text = response.text[:200]
                     logger.error(f"API Error {response.status_code}: {error_text}")
-                    raise Exception(f"API Error {response.status_code}: {error_text}")
-                
-                return response.json()
-                
+                    raise Exception(f"API Error {response.status_code}")
+                    
+        except httpx.TimeoutException:
+            logger.error(f"Таймаут запроса")
+            raise Exception(f"Таймаут запроса")
         except Exception as e:
             logger.error(f"Ошибка при отправке запроса: {str(e)}")
             raise
@@ -110,9 +109,13 @@ class GigaChatB2BClient:
     async def check_availability(self) -> bool:
         """Проверяет доступность API"""
         try:
-            test_messages = [{"role": "user", "content": "Привет"}]
+            test_messages = [{"role": "user", "content": "Тест"}]
             await self.send_request(messages=test_messages, max_tokens=5)
             return True
         except Exception as e:
-            logger.error(f"Ошибка при проверке доступности: {str(e)}")
+            logger.error(f"API недоступен: {str(e)}")
             return False
+    
+    def get_rquid(self) -> str:
+        """Возвращает текущий RqUID"""
+        return self.rquid
