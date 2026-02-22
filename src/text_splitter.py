@@ -1,0 +1,546 @@
+"""
+Модуль для семантического разделения текста на логические блоки.
+
+Предоставляет различные стратегии разбиения текста: по абзацам,
+по семантической связности, по заголовкам и т.д.
+"""
+
+import re
+import logging
+import hashlib
+from abc import ABC, abstractmethod
+from typing import List, Tuple, Optional, Dict, Any
+from dataclasses import dataclass, field
+from enum import Enum
+
+logger = logging.getLogger(__name__)
+
+
+class SplitterType(str, Enum):
+    """Типы стратегий разбиения текста."""
+    PARAGRAPH = "paragraph"          # По абзацам
+    SEMANTIC = "semantic"            # По семантической связности
+    FIXED_SIZE = "fixed_size"        # По фиксированному размеру
+    MIXED = "mixed"                  # Комбинированная стратегия
+
+
+@dataclass
+class SplitterConfig:
+    """Конфигурация для разбиения текста."""
+    
+    splitter_type: SplitterType = SplitterType.PARAGRAPH
+    """Тип стратегии разбиения."""
+    
+    min_chunk_size: int = 100
+    """Минимальный размер чанка в символах."""
+    
+    max_chunk_size: int = 2000
+    """Максимальный размер чанка в символах."""
+    
+    paragraph_separator: str = "\n\n"
+    """Разделитель абзацев."""
+    
+    semantic_threshold: float = 0.3
+    """Порог семантической схожести для объединения."""
+    
+    overlap_size: int = 50
+    """Размер перекрытия между чанками (для fixed_size)."""
+    
+    preserve_headers: bool = True
+    """Сохранять ли заголовки как отдельные чанки."""
+
+
+@dataclass
+class TextChunkInfo:
+    """Информация о текстовом блоке."""
+    
+    text: str
+    """Текст блока."""
+    
+    start_pos: int
+    """Начальная позиция в исходном тексте."""
+    
+    end_pos: int
+    """Конечная позиция в исходном тексте."""
+    
+    chunk_id: str
+    """Уникальный идентификатор блока."""
+    
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    """Метаданные блока."""
+
+
+class TextSplitter(ABC):
+    """Абстрактный базовый класс для стратегий разбиения текста."""
+    
+    def __init__(self, config: Optional[SplitterConfig] = None):
+        """
+        Инициализирует сплиттер.
+        
+        Args:
+            config: Конфигурация разбиения
+        """
+        self.config = config or SplitterConfig()
+        logger.info(f"Инициализирован {self.__class__.__name__}")
+    
+    @abstractmethod
+    def split(self, text: str) -> List[TextChunkInfo]:
+        """
+        Разбивает текст на блоки.
+        
+        Args:
+            text: Текст для разбиения
+            
+        Returns:
+            Список текстовых блоков
+        """
+        pass
+    
+    def _generate_chunk_id(self, text: str, position: int) -> str:
+        """
+        Генерирует уникальный идентификатор для блока.
+        
+        Args:
+            text: Текст блока
+            position: Позиция блока
+            
+        Returns:
+            Уникальный идентификатор
+        """
+        # Создаем хэш из текста и позиции
+        content_hash = hashlib.md5(f"{text[:100]}_{position}".encode()).hexdigest()[:8]
+        return f"chunk_{position:06d}_{content_hash}"
+    
+    def _validate_chunk_size(self, text: str) -> bool:
+        """
+        Проверяет, соответствует ли чанк ограничениям по размеру.
+        
+        Args:
+            text: Текст чанка
+            
+        Returns:
+            True если размер в допустимых пределах
+        """
+        length = len(text)
+        return self.config.min_chunk_size <= length <= self.config.max_chunk_size
+
+
+class ParagraphSplitter(TextSplitter):
+    """Разбивает текст по абзацам."""
+    
+    def split(self, text: str) -> List[TextChunkInfo]:
+        """
+        Разбивает текст на абзацы.
+        
+        Args:
+            text: Текст для разбиения
+            
+        Returns:
+            Список абзацев
+        """
+        if not text:
+            logger.warning("Получен пустой текст для разбиения")
+            return []
+        
+        # Разделяем текст на абзацы
+        paragraphs = self._split_into_paragraphs(text)
+        
+        chunks = []
+        current_pos = 0
+        
+        for i, paragraph in enumerate(paragraphs):
+            if not paragraph.strip():
+                # Пропускаем пустые абзацы
+                current_pos += len(paragraph) + len(self.config.paragraph_separator)
+                continue
+            
+            # Находим позицию абзаца в исходном тексте
+            start_pos = text.find(paragraph, current_pos)
+            if start_pos == -1:
+                start_pos = current_pos
+            
+            end_pos = start_pos + len(paragraph)
+            current_pos = end_pos
+            
+            # Проверяем размер
+            if self._validate_chunk_size(paragraph):
+                chunk_id = self._generate_chunk_id(paragraph, i)
+                
+                chunk = TextChunkInfo(
+                    text=paragraph,
+                    start_pos=start_pos,
+                    end_pos=end_pos,
+                    chunk_id=chunk_id,
+                    metadata={
+                        "splitter_type": "paragraph",
+                        "paragraph_number": i,
+                        "is_header": self._is_header(paragraph)
+                    }
+                )
+                chunks.append(chunk)
+            else:
+                # Если абзац слишком большой, разбиваем дальше
+                logger.debug(f"Абзац слишком большой ({len(paragraph)} символов), разбиваем дальше")
+                sub_chunks = self._split_large_paragraph(paragraph, start_pos, i)
+                chunks.extend(sub_chunks)
+        
+        logger.info(f"Текст разбит на {len(chunks)} абзацев")
+        return chunks
+    
+    def _split_into_paragraphs(self, text: str) -> List[str]:
+        """Разделяет текст на абзацы."""
+        # Используем указанный разделитель абзацев
+        separator = self.config.paragraph_separator
+        
+        if separator == "\n\n":
+            # Стандартное разделение по двойному переносу строки
+            paragraphs = re.split(r'\n\s*\n', text)
+        else:
+            # Пользовательский разделитель
+            paragraphs = text.split(separator)
+        
+        # Очищаем абзацы
+        cleaned_paragraphs = []
+        for para in paragraphs:
+            para = para.strip()
+            if para:  # Пропускаем пустые
+                cleaned_paragraphs.append(para)
+        
+        return cleaned_paragraphs
+    
+    def _split_large_paragraph(self, paragraph: str, start_pos: int, paragraph_num: int) -> List[TextChunkInfo]:
+        """Разбивает большой абзац на части."""
+        # Простая стратегия: разбиваем по предложениям
+        sentences = re.split(r'(?<=[.!?])\s+', paragraph)
+        
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        sentence_pos = 0
+        
+        for sentence in sentences:
+            sentence_len = len(sentence)
+            
+            if current_length + sentence_len > self.config.max_chunk_size and current_chunk:
+                # Сохраняем текущий чанк
+                chunk_text = ' '.join(current_chunk)
+                chunk_id = self._generate_chunk_id(chunk_text, paragraph_num * 1000 + len(chunks))
+                
+                chunk = TextChunkInfo(
+                    text=chunk_text,
+                    start_pos=start_pos + sentence_pos - len(chunk_text),
+                    end_pos=start_pos + sentence_pos,
+                    chunk_id=chunk_id,
+                    metadata={
+                        "splitter_type": "paragraph_sentence",
+                        "original_paragraph": paragraph_num,
+                        "is_header": False
+                    }
+                )
+                chunks.append(chunk)
+                
+                # Начинаем новый чанк
+                current_chunk = [sentence]
+                current_length = sentence_len
+            else:
+                current_chunk.append(sentence)
+                current_length += sentence_len + 1  # +1 для пробела
+            
+            sentence_pos += sentence_len + 1
+        
+        # Добавляем последний чанк
+        if current_chunk:
+            chunk_text = ' '.join(current_chunk)
+            chunk_id = self._generate_chunk_id(chunk_text, paragraph_num * 1000 + len(chunks))
+            
+            chunk = TextChunkInfo(
+                text=chunk_text,
+                start_pos=start_pos + sentence_pos - len(chunk_text),
+                end_pos=start_pos + sentence_pos,
+                chunk_id=chunk_id,
+                metadata={
+                    "splitter_type": "paragraph_sentence",
+                    "original_paragraph": paragraph_num,
+                    "is_header": False
+                }
+            )
+            chunks.append(chunk)
+        
+        return chunks
+    
+    def _is_header(self, text: str) -> bool:
+        """Определяет, является ли текст заголовком."""
+        # Заголовки обычно короткие и не заканчиваются точкой
+        lines = text.split('\n')
+        if len(lines) == 1:
+            line = lines[0].strip()
+            if (len(line) < 100 and 
+                not line.endswith('.') and 
+                not line.endswith('!') and 
+                not line.endswith('?')):
+                return True
+        
+        # Проверяем паттерны заголовков
+        header_patterns = [
+            r'^#+\s',           # Markdown заголовки
+            r'^\d+\.\s',        # Нумерованные заголовки
+            r'^[A-ZА-Я][^.!?]*:$',  # Заголовки с двоеточием
+            r'^(Введение|Заключение|Глава|Раздел|Часть)\b',
+        ]
+        
+        for pattern in header_patterns:
+            if re.match(pattern, text, re.IGNORECASE):
+                return True
+        
+        return False
+
+class SemanticSplitter(TextSplitter):
+    """Разбивает текст по семантической связности."""
+    
+    def split(self, text: str) -> List[TextChunkInfo]:
+        """
+        Разбивает текст на семантически связные блоки.
+        
+        Args:
+            text: Текст для разбиения
+            
+        Returns:
+            Список семантических блоков
+        """
+        if not text:
+            return []
+        
+        # Сначала разбиваем на абзацы
+        paragraph_splitter = ParagraphSplitter(self.config)
+        paragraphs = paragraph_splitter.split(text)
+        
+        if not paragraphs:
+            return []
+        
+        # Объединяем абзацы по семантической связности
+        chunks = []
+        current_chunk_paragraphs = []
+        current_start_pos = paragraphs[0].start_pos
+        current_text = ""
+        
+        for i, paragraph in enumerate(paragraphs):
+            paragraph_text = paragraph.text
+            
+            # Проверяем, нужно ли начинать новый чанк
+            if (current_text and 
+                (not self._are_semantically_related(current_text, paragraph_text) or
+                 len(current_text + "\n\n" + paragraph_text) > self.config.max_chunk_size)):
+                
+                # Сохраняем текущий чанк
+                chunk = self._create_chunk_from_paragraphs(
+                    current_chunk_paragraphs, 
+                    current_start_pos,
+                    len(chunks)
+                )
+                chunks.append(chunk)
+                
+                # Начинаем новый чанк
+                current_chunk_paragraphs = [paragraph]
+                current_start_pos = paragraph.start_pos
+                current_text = paragraph_text
+            else:
+                # Добавляем абзац к текущему чанку
+                current_chunk_paragraphs.append(paragraph)
+                if current_text:
+                    current_text += "\n\n" + paragraph_text
+                else:
+                    current_text = paragraph_text
+        
+        # Добавляем последний чанк
+        if current_chunk_paragraphs:
+            chunk = self._create_chunk_from_paragraphs(
+                current_chunk_paragraphs,
+                current_start_pos,
+                len(chunks)
+            )
+            chunks.append(chunk)
+        
+        logger.info(f"Текст разбит на {len(chunks)} семантических блоков")
+        return chunks
+    
+    def _are_semantically_related(self, text1: str, text2: str) -> bool:
+        """
+        Проверяет, семантически связаны ли два текста.
+        
+        Args:
+            text1: Первый текст
+            text2: Второй текст
+            
+        Returns:
+            True если тексты связаны
+        """
+        # Простая эвристика: проверяем общие ключевые слова и структуру
+        
+        # 1. Извлекаем ключевые слова (простые: слова длиннее 3 символов)
+        words1 = set(re.findall(r'\b\w{4,}\b', text1.lower()))
+        words2 = set(re.findall(r'\b\w{4,}\b', text2.lower()))
+        
+        # 2. Находим пересечение
+        common_words = words1.intersection(words2)
+        
+        # 3. Вычисляем меру схожести
+        if not words1 or not words2:
+            return False
+        
+        similarity = len(common_words) / min(len(words1), len(words2))
+        
+        # 4. Проверяем порог
+        return similarity >= self.config.semantic_threshold
+    
+    def _create_chunk_from_paragraphs(self, paragraphs: List[TextChunkInfo], 
+                                     start_pos: int, chunk_num: int) -> TextChunkInfo:
+        """Создает чанк из списка абзацев."""
+        # Объединяем тексты абзацев
+        chunk_text = "\n\n".join(p.text for p in paragraphs)
+        
+        # Вычисляем конечную позицию
+        end_pos = paragraphs[-1].end_pos
+        
+        # Создаем метаданные
+        metadata = {
+            "splitter_type": "semantic",
+            "paragraph_count": len(paragraphs),
+            "contains_headers": any(p.metadata.get("is_header", False) for p in paragraphs),
+            "paragraph_numbers": [p.metadata.get("paragraph_number", i) 
+                                 for i, p in enumerate(paragraphs)]
+        }
+        
+        chunk_id = self._generate_chunk_id(chunk_text, chunk_num)
+        
+        return TextChunkInfo(
+            text=chunk_text,
+            start_pos=start_pos,
+            end_pos=end_pos,
+            chunk_id=chunk_id,
+            metadata=metadata
+        )
+    
+class TextSplitterFactory:
+    """Фабрика для создания сплиттеров."""
+    
+    @staticmethod
+    def create_splitter(splitter_type: SplitterType = SplitterType.PARAGRAPH,
+                       config: Optional[SplitterConfig] = None) -> TextSplitter:
+        """
+        Создает сплиттер указанного типа.
+        
+        Args:
+            splitter_type: Тип сплиттера
+            config: Конфигурация
+            
+        Returns:
+            Экземпляр сплиттера
+        """
+        config = config or SplitterConfig()
+        config.splitter_type = splitter_type
+        
+        if splitter_type == SplitterType.PARAGRAPH:
+            return ParagraphSplitter(config)
+        elif splitter_type == SplitterType.SEMANTIC:
+            return SemanticSplitter(config)
+        elif splitter_type == SplitterType.FIXED_SIZE:
+            return FixedSizeSplitter(config)
+        elif splitter_type == SplitterType.MIXED:
+            return MixedSplitter(config)
+        else:
+            raise ValueError(f"Неизвестный тип сплиттера: {splitter_type}")
+
+
+class FixedSizeSplitter(TextSplitter):
+    """Разбивает текст на чанки фиксированного размера."""
+    
+    def split(self, text: str) -> List[TextChunkInfo]:
+        chunks = []
+        start = 0
+        chunk_num = 0
+        
+        while start < len(text):
+            # Определяем конец чанка
+            end = min(start + self.config.max_chunk_size, len(text))
+            
+            # Если не конец текста, ищем границу предложения
+            if end < len(text):
+                # Ищем конец предложения
+                sentence_end = self._find_sentence_boundary(text, end)
+                if sentence_end > start + self.config.min_chunk_size:
+                    end = sentence_end
+            
+            chunk_text = text[start:end].strip()
+            
+            if chunk_text and len(chunk_text) >= self.config.min_chunk_size:
+                chunk_id = self._generate_chunk_id(chunk_text, chunk_num)
+                
+                chunk = TextChunkInfo(
+                    text=chunk_text,
+                    start_pos=start,
+                    end_pos=end,
+                    chunk_id=chunk_id,
+                    metadata={
+                        "splitter_type": "fixed_size",
+                        "chunk_size": len(chunk_text),
+                        "has_overlap": chunk_num > 0
+                    }
+                )
+                chunks.append(chunk)
+                chunk_num += 1
+            
+            # Учитываем перекрытие
+            start = end - self.config.overlap_size if self.config.overlap_size > 0 else end
+        
+        logger.info(f"Текст разбит на {len(chunks)} блоков фиксированного размера")
+        return chunks
+    
+    def _find_sentence_boundary(self, text: str, position: int) -> int:
+        """Находит границу предложения."""
+        # Ищем конец предложения
+        for i in range(position, min(position + 100, len(text))):
+            if text[i] in '.!?':
+                # Проверяем, что это действительно конец предложения
+                if i + 1 >= len(text) or text[i + 1].isspace():
+                    return i + 1
+        
+        return position
+
+
+class MixedSplitter(TextSplitter):
+    """Комбинированная стратегия разбиения."""
+    
+    def split(self, text: str) -> List[TextChunkInfo]:
+        # Сначала разбиваем на абзацы
+        paragraph_splitter = ParagraphSplitter(self.config)
+        paragraphs = paragraph_splitter.split(text)
+        
+        # Затем применяем семантическое объединение
+        semantic_splitter = SemanticSplitter(self.config)
+        
+        # Преобразуем абзацы обратно в текст для семантического сплиттера
+        paragraph_text = "\n\n".join(p.text for p in paragraphs)
+        
+        return semantic_splitter.split(paragraph_text)
+
+
+def split_text(text: str, 
+               splitter_type: SplitterType = SplitterType.PARAGRAPH,
+               **kwargs) -> List[TextChunkInfo]:
+    """
+    Функция для разбиения текста.
+    
+    Args:
+        text: Текст для разбиения
+        splitter_type: Тип сплиттера
+        **kwargs: Аргументы для SplitterConfig
+        
+    Returns:
+        Список текстовых блоков
+    """
+    config = SplitterConfig(**kwargs) if kwargs else SplitterConfig()
+    splitter = TextSplitterFactory.create_splitter(splitter_type, config)
+    return splitter.split(text)
+
+
+
