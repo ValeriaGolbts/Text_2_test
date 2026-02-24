@@ -21,7 +21,7 @@ class PipelineJSONProcessor:
     
     def __init__(self):
         self.client = GigaChatB2BClient()
-        self.parser = TestParser()
+        #self.parser = TestParser()
         print(f"✅ Инициализирован B2B клиент для обработки JSON")
     
     def load_pipeline_json(self, json_path: str) -> Dict[str, Any]:
