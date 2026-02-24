@@ -1,4 +1,3 @@
-# process_json_with_gigachat.py
 """
 Обработка JSON файла от pipeline через GigaChat B2B клиент
 """
@@ -14,25 +13,23 @@ sys.path.insert(0, str(project_root))
 
 from api_client_b2b import GigaChatB2BClient
 from config import config
-#from response_parser import TestParser
 
 class PipelineJSONProcessor:
     """Обработчик JSON файлов от pipeline с отправкой в GigaChat"""
     
     def __init__(self):
         self.client = GigaChatB2BClient()
-        #self.parser = TestParser()
-        print(f"✅ Инициализирован B2B клиент для обработки JSON")
+        print(f"Инициализирован B2B клиент")
     
     def load_pipeline_json(self, json_path: str) -> Dict[str, Any]:
         """Загружает JSON файл от pipeline"""
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            print(f"✅ Загружен JSON: {json_path}")
+            print(f"Загружен JSON: {json_path}")
             return data
         except Exception as e:
-            print(f"❌ Ошибка загрузки JSON: {e}")
+            print(f"Ошибка загрузки JSON: {e}")
             return {}
     
     def extract_text_from_chunks(self, pipeline_data: Dict[str, Any]) -> List[str]:
@@ -45,11 +42,10 @@ class PipelineJSONProcessor:
             if text:
                 texts.append(text)
         
-        print(f"📝 Извлечено {len(texts)} текстовых блоков")
+        print(f"Извлечено {len(texts)} текстовых блоков")
         
-        # Показываем пример
         if texts:
-            print(f"\n📄 Пример первого блока:")
+            print(f"\n Пример первого блока:")
             print(f"   {texts[0][:200]}...")
         
         return texts
@@ -67,7 +63,7 @@ class PipelineJSONProcessor:
     def create_prompt(self, texts: List[str], num_questions: int = 10) -> str:
         """Создает промпт на основе текстов из pipeline"""
         
-        # Объединяем тексты (берем первые 3-4 чанка для контекста)
+        # Объединяем тексты
         context = "\n\n".join(texts[:4])
         
         prompt = f"""На основе предоставленного учебного материала создай тест из {num_questions} вопросов.
@@ -107,7 +103,7 @@ class PipelineJSONProcessor:
         """Основной метод: загружает JSON, отправляет в GigaChat, возвращает тест"""
         
         print("\n" + "="*60)
-        print("🚀 ЗАПУСК ОБРАБОТКИ JSON ОТ PIPELINE")
+        print("ЗАПУСК ОБРАБОТКИ JSON")
         print("="*60)
         
         # 1. Загружаем JSON
@@ -122,14 +118,14 @@ class PipelineJSONProcessor:
         
         # 3. Получаем метаданные
         metadata = self.get_metadata(pipeline_data)
-        print(f"\n📊 Метаданные от pipeline:")
+        print(f"\n Метаданные от pipeline:")
         print(f"  • Исходный файл: {metadata['source_file']}")
         print(f"  • Process ID: {metadata['process_id']}")
         print(f"  • Всего чанков: {metadata['total_chunks']}")
         
         # 4. Создаем промпт
         prompt = self.create_prompt(texts, num_questions)
-        print(f"\n🤖 Отправка в GigaChat ({num_questions} вопросов)...")
+        print(f"\n Отправка в GigaChat ({num_questions} вопросов)")
         
         # 5. Отправляем в GigaChat
         messages = [{"role": "user", "content": prompt}]
@@ -180,7 +176,7 @@ class PipelineJSONProcessor:
             return test_result
             
         except Exception as e:
-            print(f"❌ Ошибка при отправке в GigaChat: {e}")
+            print(f"Ошибка при отправке в GigaChat: {e}")
             return {"error": str(e), "pipeline_metadata": metadata}
     
     def save_result(self, result: Dict[str, Any], output_path: str = None):
@@ -194,19 +190,19 @@ class PipelineJSONProcessor:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
         
-        print(f"\n💾 Результат сохранен в: {output_path}")
+        print(f"\n Результат сохранен в: {output_path}")
         return output_path
 
 
 async def main():
     """Основная функция"""
     
-    # Путь к JSON файлу от pipeline (ИЗМЕНИТЕ НА ВАШ!)
+    # Путь к JSON файлу от pipeline 
     json_file = r"C:\Users\валерия\Projects\Text_2_test\output.json"
     
     # Проверяем существование файла
     if not Path(json_file).exists():
-        print(f"❌ Файл не найден: {json_file}")
+        print(f" Ошибка, файл не найден: {json_file}")
         
         # Ищем в текущей папке
         current_dir = Path(__file__).parent
@@ -218,7 +214,7 @@ async def main():
             
             # Берем первый
             json_file = str(possible_files[0])
-            print(f"\n📁 Использую: {json_file}")
+            print(f"\n Использую: {json_file}")
         else:
             return
     
@@ -236,24 +232,22 @@ async def main():
         output_file = processor.save_result(result)
         
         # Показываем статистику
-        print("\n" + "="*60)
-        print("📊 РЕЗУЛЬТАТ ГЕНЕРАЦИИ ТЕСТА")
-        print("="*60)
-        print(f"📌 Название: {result.get('test_title', 'Не указано')}")
-        print(f"📌 Тема: {result.get('subject', 'Не указана')}")
-        print(f"📌 Сложность: {result.get('difficulty', 'Не указана')}")
-        print(f"📌 Вопросов: {len(result.get('questions', []))}")
+        print(" Результат генерации теста:")
+        print(f"Название: {result.get('test_title', 'Не указано')}")
+        print(f"Тема: {result.get('subject', 'Не указана')}")
+        print(f"Сложность: {result.get('difficulty', 'Не указана')}")
+        print(f"Вопросов: {len(result.get('questions', []))}")
         
         if result.get('questions'):
-            print("\n❓ ПЕРВЫЙ ВОПРОС:")
+            print("\n Показываем первый вопрос:")
             q = result['questions'][0]
             print(f"  {q.get('question', '')}")
             print("  Варианты:")
             for i, opt in enumerate(q.get('options', []), 1):
                 print(f"    {i}. {opt}")
-            print(f"  ✅ Правильный ответ: {q.get('correct_answer', '')}")
+            print(f"Правильный ответ: {q.get('correct_answer', '')}")
     else:
-        print(f"\n❌ Ошибка: {result['error']}")
+        print(f"\n Ошибка: {result['error']}")
 
 if __name__ == "__main__":
     asyncio.run(main())
