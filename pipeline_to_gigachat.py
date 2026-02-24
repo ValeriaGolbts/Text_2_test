@@ -14,7 +14,7 @@ sys.path.insert(0, str(project_root))
 
 from api_client_b2b import GigaChatB2BClient
 from config import config
-from response_parser import TestParser
+#from response_parser import TestParser
 
 class PipelineJSONProcessor:
     """Обработчик JSON файлов от pipeline с отправкой в GigaChat"""
