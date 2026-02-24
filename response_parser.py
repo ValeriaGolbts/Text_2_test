@@ -13,12 +13,6 @@ class ResponseParser:
     def extract_content_from_response(api_response: Dict[str, Any]) -> str:
         """
         Извлекает сгенерированный текст из сырого JSON ответа API.
-        
-        Args:
-            api_response: Сырой JSON ответ от GigaChat API
-            
-        Returns:
-            Текст, сгенерированный моделью
         """
         try:
             # Стандартная структура ответа GigaChat
@@ -51,14 +45,8 @@ class ResponseParser:
         """
         Парсит JSON из сгенерированного текста.
         Очищает от возможных markdown оберток.
-        
-        Args:
-            content: Текст ответа от GigaChat
-            
-        Returns:
-            Распарсенный JSON как словарь
         """
-        # Очищаем от markdown оберток (```json ... ```)
+        # Очищаем от markdown оберток 
         cleaned_content = content.strip()
         
         if "```json" in cleaned_content:
