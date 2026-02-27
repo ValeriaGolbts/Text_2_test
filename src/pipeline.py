@@ -11,6 +11,7 @@ import json
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+import re
 from dataclasses import asdict
 
 from src.models import Formula, TextChunk, ProcessingResult, ProcessingStats
@@ -31,9 +32,9 @@ class LectureProcessingPipeline:
     
     def __init__(self, 
                  detect_plain_text_formulas: bool = True,
-                 splitter_type: SplitterType = SplitterType.SEMANTIC,
+                 splitter_type: SplitterType = SplitterType.MIXED,
                  min_chunk_size: int = 100,
-                 max_chunk_size: int = 2000,
+                 max_chunk_size: int = 50000,
                  preserve_original_text: bool = True):
         """
         Инициализирует конвейер обработки.
@@ -88,29 +89,29 @@ class LectureProcessingPipeline:
             logger.debug("Шаг 2: Нормализация текста")
             normalized_content, normalization_stats = self._normalize_text(raw_content)
             
-            # Шаг 3.1: Поиск и обработка формул
-            logger.debug("Шаг 3.1: Поиск формул")
-            formula_result = self._extract_formulas(normalized_content)
-
-            # Шаг 3.2: Извлечение блоков кода
-            logger.debug("Шаг 3.2: Извлечение блоков кода")
-            code_blocks = self._extract_code_blocks(formula_result.text_with_placeholders)
+            # Шаг 3.1: Извлечение блоков кода 
+            logger.debug("Шаг 3.1: Извлечение блоков кода")
+            code_blocks = self._extract_code_blocks(normalized_content)
             # Заменяем код на плейсхолдеры
             text_with_code_placeholders = self.code_extractor.replace_with_placeholders(
-                formula_result.text_with_placeholders, code_blocks
+                normalized_content, code_blocks
             )
             
-            # Шаг 4: Разбиение на блоки
+            # Шаг 3.2: Поиск и обработка формул в тексте без кода
+            logger.debug("Шаг 3.2: Поиск формул")
+            formula_result = self._extract_formulas(text_with_code_placeholders)
+            
+            # Шаг 4: Разбиение на блоки (текст уже с плейсхолдерами и формул, и кода)
             logger.debug("Шаг 4: Разбиение на блоки")
-            chunks_info = self._split_text(text_with_code_placeholders)
+            chunks_info = self._split_text(formula_result.text_with_placeholders)
             
             # Шаг 5: Создание текстовых блоков с метаданными
             logger.debug("Шаг 5: Создание блоков с метаданными")
             text_chunks = self._create_text_chunks(
                 chunks_info, 
                 formula_result, 
-                normalized_content,
-                code_blocks
+                code_blocks,          # передаём список блоков кода
+                normalized_content
             )
             
             # Шаг 6: Сбор статистики
@@ -132,9 +133,9 @@ class LectureProcessingPipeline:
             )
             
             logger.info(f"Обработка завершена успешно. "
-                       f"Блоков: {len(text_chunks)}, "
-                       f"Формул: {stats.total_formulas}, "
-                       f"Время: {stats.processing_time_seconds:.2f}с")
+                    f"Блоков: {len(text_chunks)}, "
+                    f"Формул: {stats.total_formulas}, "
+                    f"Время: {stats.processing_time_seconds:.2f}с")
             
             return result
             
@@ -191,73 +192,45 @@ class LectureProcessingPipeline:
     def _create_text_chunks(self, 
                        chunks_info: List[TextChunkInfo],
                        formula_result: FormulaDetectionResult,
-                       original_normalized_text: str,
-                       code_blocks: List[CodeBlock]) -> List[TextChunk]:
+                       code_blocks: List[CodeBlock],
+                       original_normalized_text: str) -> List[TextChunk]:
         """
-        Создает объекты TextChunk с метаданными.
+        Создаёт объекты TextChunk с метаданными.
         """
         text_chunks = []
+        code_placeholder_pattern = re.compile(r'\[\[CODE_.*?\]\]')
         
-        # Создаем словарь для быстрого поиска блоков кода по плейсхолдеру
-        code_placeholder_map = {}
-        for cb in code_blocks:
-            placeholder = f"[[CODE_{cb.start_pos}_{cb.language}]]"
-            code_placeholder_map[placeholder] = cb
-
-        print(f"Code blocks found: {len(code_blocks)}")
-        for cb in code_blocks:
-            print(f"  Code block: lang={cb.language}, pos={cb.start_pos}-{cb.end_pos}")
-            print(f"    Placeholder: {placeholder}")
-
         for i, chunk_info in enumerate(chunks_info):
-            print(f"Chunk {i} text: {chunk_info.text}")
-            print(f"  Looking for code placeholder in: {list(code_placeholder_map.keys())}")
-            
-            # Проверяем, есть ли в этом чанке плейсхолдер кода
-            code_placeholder = None
-            for placeholder in code_placeholder_map:
-                if placeholder in chunk_info.text:
-                    code_placeholder = placeholder
-                    break
-
-            if code_placeholder:
-                # Это блок кода
-                cb = code_placeholder_map[code_placeholder]
-                restored_text = cb.code
+            # Проверяем, содержит ли чанк плейсхолдер кода
+            if code_placeholder_pattern.search(chunk_info.text):
+                # Это блок кода – восстанавливаем только код
+                restored_text = self.code_extractor.restore_from_placeholders(
+                    chunk_info.text, code_blocks
+                )
                 block_type = BlockType.CODE
-                # Формулы внутри кода не ищем
-                chunk_formulas = []
-                # Извлекаем оригинальный текст (кусок исходного текста, содержащий код)
-                original_chunk_text = original_normalized_text[
-                    chunk_info.start_pos:chunk_info.end_pos
-                ]
-                # Метаданные: добавляем информацию о языке
+                chunk_formulas = []  # формулы внутри кода не обрабатываем
+                
+                # Пытаемся определить язык (упрощённо)
+                language = self.code_extractor._guess_language(restored_text)
                 combined_metadata = chunk_info.metadata.copy()
-                combined_metadata['language'] = cb.language
-                combined_metadata['code_length'] = len(cb.code)
-                # Не вызываем extract_metadata для кода, так как это не текст
+                combined_metadata['language'] = language
+                combined_metadata['code_length'] = len(restored_text)
             else:
-                # Обычный текстовый блок – восстанавливаем формулы
+                # Текстовый блок – сначала восстанавливаем код (на случай, если он не был выделен),
+                # затем формулы
+                text_after_code = self.code_extractor.restore_from_placeholders(
+                    chunk_info.text, code_blocks
+                )
                 restored_text = self.formula_extractor.restore_formulas(
-                    chunk_info.text,
-                    formula_result.placeholder_to_formula
+                    text_after_code, formula_result.placeholder_to_formula
                 )
                 block_type = BlockType.TEXT
                 
-                # Находим формулы, относящиеся к этому блоку
+                # Находим формулы, попадающие в этот чанк (по позициям)
                 chunk_formulas = []
                 for formula in formula_result.formulas:
-                    if (formula.start_pos >= chunk_info.start_pos and 
-                        formula.end_pos <= chunk_info.end_pos):
+                    if chunk_info.start_pos <= formula.start_pos <= chunk_info.end_pos:
                         chunk_formulas.append(formula)
-                
-                # Извлекаем оригинальный текст (без плейсхолдеров)
-                if self.preserve_original_text:
-                    original_chunk_text = original_normalized_text[
-                        chunk_info.start_pos:chunk_info.end_pos
-                    ]
-                else:
-                    original_chunk_text = restored_text
                 
                 # Извлекаем метаданные
                 metadata = extract_metadata(
@@ -265,12 +238,11 @@ class LectureProcessingPipeline:
                     formulas=chunk_formulas,
                     context={'parent_metadata': chunk_info.metadata}
                 )
-                # Объединяем метаданные от сплиттера и экстрактора
                 combined_metadata = {**chunk_info.metadata, **metadata}
             
-            print(f"  Combined metadata before chunk: {combined_metadata}")
+            # Временное решение: original_text = restored_text
+            original_chunk_text = restored_text
             
-            # Создаем объект TextChunk
             text_chunk = TextChunk(
                 id=chunk_info.chunk_id,
                 sequence_number=i,
@@ -280,7 +252,6 @@ class LectureProcessingPipeline:
                 metadata=combined_metadata,
                 block_type=block_type
             )
-            
             text_chunks.append(text_chunk)
         
         return text_chunks
@@ -364,9 +335,9 @@ class PipelineConfig:
     
     def __init__(self, 
                  detect_plain_text_formulas: bool = True,
-                 splitter_type: SplitterType = SplitterType.PARAGRAPH,
+                 splitter_type: SplitterType = SplitterType.MIXED,
                  min_chunk_size: int = 100,
-                 max_chunk_size: int = 2000,
+                 max_chunk_size: int = 50000,
                  output_format: str = 'json'):
         """
         Инициализирует конфигурацию.

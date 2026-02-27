@@ -46,7 +46,7 @@ class FormulaExtractor:
     
     def __init__(self, 
                  detect_plain_text: bool = True,
-                 min_plain_text_length: int = 3,
+                 min_plain_text_length: int = 5,
                  max_plain_text_length: int = 100):
         """
         Инициализирует экстрактор формул.
@@ -85,13 +85,12 @@ class FormulaExtractor:
         )
         
         # Паттерн для plain-text формул
-        # Ищем последовательности с математическими операторами
         self.plain_text_pattern = re.compile(
-            r'\b(?:[A-Za-zα-ωΑ-Ω_][A-Za-zα-ωΑ-Ω0-9_]*\s*'
-            r'(?:[=+\-*/^<>≤≥≠≈∼∝∫∑∏√∛∜∂∇∆]|\\[a-zA-Z]+)\s*'
-            r'[A-Za-zα-ωΑ-Ω0-9_+\-*/^().,\[\]{}\s]*'
-            r'(?:[=+\-*/^<>≤≥≠≈∼∝∫∑∏√∛∜∂∇∆]|\\[a-zA-Z]+)\s*'
-            r'[A-Za-zα-ωΑ-Ω0-9_+\-*/^().,\[\]{}\s]*)\b'
+            r'(?:(?<=\s)|^)'                          # начало слова или пробел
+            r'[A-Za-zα-ωΑ-Ω0-9_]+'                    # обязательная буква/цифра
+            r'(?:\s*[=+\-*/^<>≤≥≠≈∼∝∫∑∏√∛∜∂∇∆]\s*'    # оператор
+            r'[A-Za-zα-ωΑ-Ω0-9_+\-*/^().,\[\]{}]*)*'  # остаток выражения
+            r'(?=\s|$|[.,;!?])'                        # заканчивается пробелом или пунктуацией
         )
         
         # Паттерн для определения, является ли текст формулой
@@ -276,67 +275,47 @@ class FormulaExtractor:
     def _extract_plain_text(self, text: str, original_text: str) -> Tuple[List[Formula], str]:
         """
         Извлекает plain-text формулы.
-        
-        Args:
-            text: Текст для анализа (уже с замененными LaTeX формулами)
-            original_text: Оригинальный текст (для позиций)
-            
-        Returns:
-            Кортеж (список формул, текст с плейсхолдерами)
         """
         formulas = []
-        
-        # Простой алгоритм: ищем подстроки с математическими операторами
-        # которые не являются частью обычного текста
-        
-        # Разбиваем текст на слова/токены
-        tokens = re.findall(r'\b\w+\b|[=+\-*/^<>()\[\]{}]', text)
-        
-        # Проходим по тексту и ищем потенциальные формулы
-        i = 0
-        while i < len(text):
-            # Если нашли математический оператор
-            if text[i] in self.math_operators:
-                # Ищем начало и конец потенциальной формулы
-                start = self._find_formula_start(text, i)
-                end = self._find_formula_end(text, i)
-                
-                formula_text = text[start:end]
-
-                if "[[FORMULA_" in formula_text:
-                    i = end
-                    continue
-                
-                # Проверяем, что это похоже на формулу
-                if (self._looks_like_formula(formula_text) and
-                    self.min_plain_text_length <= len(formula_text) <= self.max_plain_text_length):
-                    
-                    # Нормализуем формулу
-                    normalized = self._normalize_formula(formula_text, FormulaType.PLAIN_TEXT)
-                    
-                    formula = Formula(
-                        original=formula_text,
-                        normalized=normalized,
-                        start_pos=start,
-                        end_pos=end,
-                        formula_type=FormulaType.PLAIN_TEXT
-                    )
-                    
-                    formulas.append(formula)
-                    
-                    # Создаем плейсхолдер
-                    placeholder = self._create_placeholder(start)
-                    
-                    # Заменяем формулу на плейсхолдер
-                    text = text[:start] + placeholder + text[end:]
-                    
-                    # Продолжаем с позиции после плейсхолдера
-                    i = start + len(placeholder)
-                    continue
+        # Сначала собираем все совпадения из оригинального текста
+        for match in self.plain_text_pattern.finditer(text):
+            formula_text = match.group(0)
+            start_pos = match.start()
+            end_pos = match.end()
             
-            i += 1
+            # Пропускаем, если содержит плейсхолдеры
+            if '[[FORMULA_' in formula_text:
+                continue
+            
+            if len(formula_text) < self.min_plain_text_length:
+                continue
+            if len(formula_text) > self.max_plain_text_length:
+                continue
+            
+            if not self._looks_like_formula(formula_text):
+                continue
+            
+            normalized = self._normalize_plain_text_formula(formula_text)
+            formula = Formula(
+                original=formula_text,
+                normalized=normalized,
+                start_pos=start_pos,
+                end_pos=end_pos,
+                formula_type=FormulaType.PLAIN_TEXT
+            )
+            formulas.append(formula)
         
-        return formulas, text
+        # Заменяем найденные формулы на плейсхолдеры, идя с конца
+        text_with_placeholders = text
+        for formula in sorted(formulas, key=lambda f: f.start_pos, reverse=True):
+            placeholder = self._create_placeholder(formula.start_pos)
+            text_with_placeholders = (
+                text_with_placeholders[:formula.start_pos] 
+                + placeholder 
+                + text_with_placeholders[formula.end_pos:]
+            )
+        
+        return formulas, text_with_placeholders
     
     def _find_formula_start(self, text: str, pos: int) -> int:
         """Находит начало формулы."""
@@ -356,16 +335,26 @@ class FormulaExtractor:
     
     def _looks_like_formula(self, text: str) -> bool:
         """Проверяет, похож ли текст на формулу."""
-        # Должен содержать математический оператор
+        # Должен содержать хотя бы один математический оператор
         if not any(op in text for op in self.math_operators):
             return False
         
-        # Не должен быть обычным текстом (только буквы)
-        if text.replace(' ', '').isalpha():
+        # Не должен состоять преимущественно из букв (более 80%)
+        letters = sum(c.isalpha() for c in text)
+        total = len(text)
+        if total == 0:
+            return False
+        if letters / total > 0.8:
+            # Если много букв, но есть греческие символы – возможно, формула
+            if not re.search(r'[α-ωΑ-Ω]', text):
+                return False
+        
+        # Должна содержать хотя бы одну цифру или быть короткой
+        if not re.search(r'\d', text) and len(text) > 10:
+            # Длинные тексты без цифр вряд ли формулы
             return False
         
-        # Проверяем регулярным выражением
-        return bool(self.is_formula_pattern.match(text))
+        return True
     
     def _normalize_formula(self, formula_text: str, formula_type: FormulaType) -> str:
         """

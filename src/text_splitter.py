@@ -150,20 +150,28 @@ class ParagraphSplitter(TextSplitter):
         
         for i, paragraph in enumerate(paragraphs):
             if not paragraph.strip():
-                # Пропускаем пустые абзацы
-                current_pos += len(paragraph) + len(self.config.paragraph_separator)
+                # Пропускаем пустые абзацы, но учитываем их длину для смещения позиции
+                # (пустые строки тоже занимают место в исходном тексте)
+                empty_len = len(paragraph) + len(self.config.paragraph_separator)
+                current_pos += empty_len
                 continue
             
-            # Находим позицию абзаца в исходном тексте
+            # Находим позицию абзаца в исходном тексте (поиск от current_pos)
             start_pos = text.find(paragraph, current_pos)
             if start_pos == -1:
+                # Если не нашли (редкий случай), используем текущую позицию
                 start_pos = current_pos
             
             end_pos = start_pos + len(paragraph)
-            current_pos = end_pos
+            current_pos = end_pos + len(self.config.paragraph_separator)  # переходим за разделитель
             
-            # Проверяем размер
-            if self._validate_chunk_size(paragraph):
+            # Проверяем размер абзаца: если слишком большой – разбиваем
+            if len(paragraph) > self.config.max_chunk_size:
+                logger.debug(f"Абзац слишком большой ({len(paragraph)} символов), разбиваем дальше")
+                sub_chunks = self._split_large_paragraph(paragraph, start_pos, i)
+                chunks.extend(sub_chunks)
+            else:
+                # Создаём чанк для любого абзаца (даже очень короткого)
                 chunk_id = self._generate_chunk_id(paragraph, i)
                 
                 chunk = TextChunkInfo(
@@ -178,11 +186,6 @@ class ParagraphSplitter(TextSplitter):
                     }
                 )
                 chunks.append(chunk)
-            else:
-                # Если абзац слишком большой, разбиваем дальше
-                logger.debug(f"Абзац слишком большой ({len(paragraph)} символов), разбиваем дальше")
-                sub_chunks = self._split_large_paragraph(paragraph, start_pos, i)
-                chunks.extend(sub_chunks)
         
         logger.info(f"Текст разбит на {len(chunks)} абзацев")
         return chunks
@@ -208,65 +211,65 @@ class ParagraphSplitter(TextSplitter):
         
         return cleaned_paragraphs
     
-    def _split_large_paragraph(self, paragraph: str, start_pos: int, paragraph_num: int) -> List[TextChunkInfo]:
-        """Разбивает большой абзац на части."""
-        # Простая стратегия: разбиваем по предложениям
-        sentences = re.split(r'(?<=[.!?])\s+', paragraph)
+    # def _split_large_paragraph(self, paragraph: str, start_pos: int, paragraph_num: int) -> List[TextChunkInfo]:
+    #     """Разбивает большой абзац на части."""
+    #     # Простая стратегия: разбиваем по предложениям
+    #     sentences = re.split(r'(?<=[.!?])\s+', paragraph)
         
-        chunks = []
-        current_chunk = []
-        current_length = 0
-        sentence_pos = 0
+    #     chunks = []
+    #     current_chunk = []
+    #     current_length = 0
+    #     sentence_pos = 0
         
-        for sentence in sentences:
-            sentence_len = len(sentence)
+    #     for sentence in sentences:
+    #         sentence_len = len(sentence)
             
-            if current_length + sentence_len > self.config.max_chunk_size and current_chunk:
-                # Сохраняем текущий чанк
-                chunk_text = ' '.join(current_chunk)
-                chunk_id = self._generate_chunk_id(chunk_text, paragraph_num * 1000 + len(chunks))
+    #         if current_length + sentence_len > self.config.max_chunk_size and current_chunk:
+    #             # Сохраняем текущий чанк
+    #             chunk_text = ' '.join(current_chunk)
+    #             chunk_id = self._generate_chunk_id(chunk_text, paragraph_num * 1000 + len(chunks))
                 
-                chunk = TextChunkInfo(
-                    text=chunk_text,
-                    start_pos=start_pos + sentence_pos - len(chunk_text),
-                    end_pos=start_pos + sentence_pos,
-                    chunk_id=chunk_id,
-                    metadata={
-                        "splitter_type": "paragraph_sentence",
-                        "original_paragraph": paragraph_num,
-                        "is_header": False
-                    }
-                )
-                chunks.append(chunk)
+    #             chunk = TextChunkInfo(
+    #                 text=chunk_text,
+    #                 start_pos=start_pos + sentence_pos - len(chunk_text),
+    #                 end_pos=start_pos + sentence_pos,
+    #                 chunk_id=chunk_id,
+    #                 metadata={
+    #                     "splitter_type": "paragraph_sentence",
+    #                     "original_paragraph": paragraph_num,
+    #                     "is_header": False
+    #                 }
+    #             )
+    #             chunks.append(chunk)
                 
-                # Начинаем новый чанк
-                current_chunk = [sentence]
-                current_length = sentence_len
-            else:
-                current_chunk.append(sentence)
-                current_length += sentence_len + 1  # +1 для пробела
+    #             # Начинаем новый чанк
+    #             current_chunk = [sentence]
+    #             current_length = sentence_len
+    #         else:
+    #             current_chunk.append(sentence)
+    #             current_length += sentence_len + 1  # +1 для пробела
             
-            sentence_pos += sentence_len + 1
+    #         sentence_pos += sentence_len + 1
         
-        # Добавляем последний чанк
-        if current_chunk:
-            chunk_text = ' '.join(current_chunk)
-            chunk_id = self._generate_chunk_id(chunk_text, paragraph_num * 1000 + len(chunks))
+        # # Добавляем последний чанк
+        # if current_chunk:
+        #     chunk_text = ' '.join(current_chunk)
+        #     chunk_id = self._generate_chunk_id(chunk_text, paragraph_num * 1000 + len(chunks))
             
-            chunk = TextChunkInfo(
-                text=chunk_text,
-                start_pos=start_pos + sentence_pos - len(chunk_text),
-                end_pos=start_pos + sentence_pos,
-                chunk_id=chunk_id,
-                metadata={
-                    "splitter_type": "paragraph_sentence",
-                    "original_paragraph": paragraph_num,
-                    "is_header": False
-                }
-            )
-            chunks.append(chunk)
+        #     chunk = TextChunkInfo(
+        #         text=chunk_text,
+        #         start_pos=start_pos + sentence_pos - len(chunk_text),
+        #         end_pos=start_pos + sentence_pos,
+        #         chunk_id=chunk_id,
+        #         metadata={
+        #             "splitter_type": "paragraph_sentence",
+        #             "original_paragraph": paragraph_num,
+        #             "is_header": False
+        #         }
+        #     )
+        #     chunks.append(chunk)
         
-        return chunks
+        # return chunks
     
     def _is_header(self, text: str) -> bool:
         """Определяет, является ли текст заголовком."""
