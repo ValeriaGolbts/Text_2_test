@@ -14,15 +14,17 @@ from datetime import datetime
 import re
 from dataclasses import asdict
 
-from src.models import Formula, TextChunk, ProcessingResult, ProcessingStats
+from src.data_models import Formula, TextChunk, ProcessingResult, ProcessingStats
 from src.file_loader import FileLoaderFactory, load_file
 from src.text_normalizer import TextNormalizer
 from src.formula_extractor import FormulaExtractor, FormulaDetectionResult
 from src.text_splitter import split_text, SplitterType, TextChunkInfo
 from src.metadata_extractor import extract_metadata
+from src.text_cleaner import LectureTextCleaner
+from src.file_loader import FileLoaderFactory, AudioLoader, VideoLoader, load_file
 
 from src.code_extractor import CodeExtractor, CodeBlock
-from src.models import BlockType
+from src.data_models import BlockType
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,8 @@ class LectureProcessingPipeline:
                  splitter_type: SplitterType = SplitterType.MIXED,
                  min_chunk_size: int = 100,
                  max_chunk_size: int = 50000,
-                 preserve_original_text: bool = True):
+                 preserve_original_text: bool = True,
+                 vosk_model_path: str = "models/vosk-model-small-ru-0.22"):
         """
         Инициализирует конвейер обработки.
         
@@ -58,7 +61,9 @@ class LectureProcessingPipeline:
             detect_plain_text=detect_plain_text_formulas
         )
         
-        self.code_extractor = CodeExtractor()  
+        self.code_extractor = CodeExtractor()
+        self.vosk_model_path = vosk_model_path
+        self.text_cleaner = LectureTextCleaner()  
 
         logger.info(f"Инициализирован конвейер обработки (splitter: {splitter_type})")
     
@@ -80,14 +85,26 @@ class LectureProcessingPipeline:
         
         try:
             logger.info(f"Начало обработки файла: {file_path}")
-            
+     
             # Шаг 1: Загрузка файла
             logger.debug("Шаг 1: Загрузка файла")
-            raw_content, file_metadata = self._load_file(file_path)
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext == '.mp3':
+                loader = AudioLoader(model_path=self.vosk_model_path)
+            elif ext == '.mp4':
+                loader = VideoLoader(model_path=self.vosk_model_path)
+            else:
+                loader = FileLoaderFactory.get_loader(file_path)
+            raw_content = loader.load(file_path)
+            file_metadata = loader.get_metadata()
             
             # Шаг 2: Нормализация текста
             logger.debug("Шаг 2: Нормализация текста")
             normalized_content, normalization_stats = self._normalize_text(raw_content)
+            # Шаг 2.1: Очистка текста (для аудио/видео)
+            # if ext in ('.mp3', '.mp4'):
+            #     logger.debug("Шаг 2.5: Очистка текста от нерелевантных фрагментов")
+            #     normalized_content = self.text_cleaner.clean(normalized_content)
             
             # Шаг 3.1: Извлечение блоков кода 
             logger.debug("Шаг 3.1: Извлечение блоков кода")

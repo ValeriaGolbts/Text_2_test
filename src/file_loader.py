@@ -12,6 +12,12 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 from docx import Document
 
+import json
+import wave
+import tempfile
+import subprocess
+from vosk import Model, KaldiRecognizer
+
 # Настройка логирования
 logger = logging.getLogger(__name__)
 
@@ -289,7 +295,97 @@ class DocxLoader(FileLoader):
     def get_metadata(self) -> dict:
         return self._metadata.copy()
     
-        
+def transcribe_audio_vosk(audio_path: str, model_path: str) -> str:
+    """
+    Транскрибирует аудиофайл (mp3, wav) с помощью Vosk.
+    model_path: путь к папке с моделью Vosk.
+    """
+    # Если файл не wav, конвертируем во временный wav
+    if not audio_path.endswith('.wav'):
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_wav = tmp.name
+        cmd = ['ffmpeg', '-i', audio_path, '-ar', '16000', '-ac', '1', '-y', tmp_wav]
+        subprocess.run(cmd, capture_output=True, check=True)
+    else:
+        tmp_wav = audio_path
+
+    try:
+        from vosk import Model, KaldiRecognizer
+        import wave
+        import json
+
+        model = Model(model_path)
+        # Используем with для автоматического закрытия файла
+        with wave.open(tmp_wav, "rb") as wf:
+            rec = KaldiRecognizer(model, wf.getframerate())
+            text_parts = []
+            while True:
+                data = wf.readframes(4000)
+                if len(data) == 0:
+                    break
+                if rec.AcceptWaveform(data):
+                    result = json.loads(rec.Result())
+                    text_parts.append(result.get("text", ""))
+            final = json.loads(rec.FinalResult())
+            text_parts.append(final.get("text", ""))
+            return " ".join(text_parts)
+    finally:
+        # Удаляем временный файл, если он был создан
+        if tmp_wav != audio_path:
+            try:
+                os.remove(tmp_wav)
+            except PermissionError:
+                # Если файл ещё занят, дадим немного времени и повторим
+                import time
+                time.sleep(0.5)
+                os.remove(tmp_wav)
+
+class AudioLoader(FileLoader):
+    def __init__(self, model_path: str = "models/vosk-model-small-ru-0.22"):
+        self._metadata = {}
+        self.model_path = model_path
+
+    def load(self, file_path: str) -> str:
+        self._validate_file(file_path)
+        text = transcribe_audio_vosk(file_path, self.model_path)
+        self._metadata = {
+            "file_type": "audio",
+            "file_size": os.path.getsize(file_path),
+            "model": "vosk",
+            "character_count": len(text)
+        }
+        return text
+
+    def get_metadata(self):
+        return self._metadata.copy()
+    
+class VideoLoader(FileLoader):
+    def __init__(self, model_path: str = "models/vosk-model-small-ru-0.22"):
+        self._metadata = {}
+        self.model_path = model_path
+
+    def load(self, file_path: str) -> str:
+        self._validate_file(file_path)
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            tmp_audio = tmp.name
+        cmd = ['ffmpeg', '-i', file_path, '-q:a', '0', '-map', 'a', '-y', tmp_audio]
+        subprocess.run(cmd, capture_output=True, check=True)
+        try:
+            text = transcribe_audio_vosk(tmp_audio, self.model_path)
+            self._metadata = {
+                "file_type": "video",
+                "file_size": os.path.getsize(file_path),
+                "model": "vosk",
+                "character_count": len(text)
+            }
+            return text
+        finally:
+            if os.path.exists(tmp_audio):
+                os.remove(tmp_audio)
+
+    def get_metadata(self):
+        return self._metadata.copy()
+
 class FileLoaderFactory:
     """Фабрика для создания загрузчиков файлов по расширению."""
     
@@ -297,7 +393,9 @@ class FileLoaderFactory:
     _loaders = {
         '.txt': TxtLoader,
         '.pdf': PdfLoader,
-        '.docx': DocxLoader
+        '.docx': DocxLoader,
+        '.mp3': AudioLoader,
+        '.mp4': VideoLoader
     }
     
     @classmethod
