@@ -102,9 +102,7 @@ class PipelineJSONProcessor:
     async def process_pipeline_json(self, json_path: str, num_questions: int = 10) -> Dict[str, Any]:
         """Основной метод: загружает JSON, отправляет в GigaChat, возвращает тест"""
         
-        print("\n" + "="*60)
-        print("ЗАПУСК ОБРАБОТКИ JSON")
-        print("="*60)
+        print("Обработка JSON")
         
         # 1. Загружаем JSON
         pipeline_data = self.load_pipeline_json(json_path)
@@ -137,7 +135,7 @@ class PipelineJSONProcessor:
                 temperature=0.7
             )
             
-            print(f"✅ Получен ответ от GigaChat")
+            print(f"Ответ от GigaChat")
             
             # 6. Извлекаем JSON из ответа
             content = response['choices'][0]['message']['content']
