@@ -84,6 +84,13 @@ class TextNormalizer:
         self.formula_safe_chars = set('+-*/=^_<>()[]{}|\\$')
         
         logger.debug("Паттерны нормализации скомпилированы")
+
+    def _remove_hyphen_linebreaks(self, text: str) -> str:
+        """
+        Удаляет паттерны '-\n' (дефис и перевод строки) для склеивания разорванных слов.
+        """
+        # Удаляем дефис и следующий за ним перевод строки (учитывая \r\n на Windows)
+        return re.sub(r'-\r?\n', '', text)
     
     def normalize(self, text: str) -> Tuple[str, NormalizationStats]:
         """
@@ -107,6 +114,8 @@ class TextNormalizer:
         
         # Шаг 2: Нормализация переносов строк
         text = self._normalize_linebreaks(text)
+        # Удаляем переносы слов через дефис
+        text = self._remove_hyphen_linebreaks(text)
         
         # Шаг 3: Удаление специальных символов (кроме формул)
         text = self._remove_special_chars(text)
@@ -125,6 +134,7 @@ class TextNormalizer:
         logger.info(f"Текст нормализован: {original_length} -> {len(text)} символов")
         
         return text, self.stats
+    
     
     def _remove_bom(self, text: str) -> str:
         """Удаляет BOM и невидимые символы из начала текста."""

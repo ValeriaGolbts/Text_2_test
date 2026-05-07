@@ -11,12 +11,26 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 from pathlib import Path
 from docx import Document
+# import pdfplumber
+import pymupdf4llm
+from faster_whisper import WhisperModel
+# import easyocr
+
+import time
+from PIL import Image
+import io
+import re
+from .data_models import ProcessingResult 
+import fitz  
 
 import json
 import wave
 import tempfile
 import subprocess
 from vosk import Model, KaldiRecognizer
+import numpy as np
+
+import shutil
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
@@ -162,93 +176,84 @@ class TxtLoader(FileLoader):
         # Если ни одна не подошла, используем utf-8 с игнорированием ошибок
         logger.warning(f"Не удалось определить кодировку для {file_path}, используем utf-8 с игнорированием ошибок")
         return 'utf-8'
-    
+
+
 class PdfLoader(FileLoader):
-    """Загрузчик для PDF файлов (.pdf)."""
+    """Загрузчик для PDF файлов (.pdf) с использованием pymupdf4llm."""
+    UNICODE_FIX_MAP = {
+                # Греческие буквы (строчные)
+                '\uf061': 'α', '\uf062': 'β', '\uf063': 'γ', '\uf064': 'δ',
+                '\uf065': 'ε', '\uf066': 'ζ', '\uf067': 'η', '\uf068': 'θ',
+                '\uf069': 'ι', '\uf06a': 'κ', '\uf06b': 'μ', '\uf06c': 'λ',
+                '\uf06d': 'ν', '\uf06e': 'ξ', '\uf06f': 'ο', '\uf070': 'π',
+                '\uf071': 'ρ', '\uf072': 'σ', '\uf073': 'σ', '\uf074': 'τ',
+                '\uf075': 'υ', '\uf076': 'φ', '\uf077': 'χ', '\uf078': 'ψ',
+                '\uf079': 'ω',
+                # Греческие буквы (заглавные)
+                '\uf041': 'Α', '\uf042': 'Β', '\uf043': 'Γ', '\uf044': 'Δ',
+                '\uf045': 'Ε', '\uf046': 'Ζ', '\uf047': 'Η', '\uf048': 'Θ',
+                '\uf049': 'Ι', '\uf04a': 'Κ', '\uf04b': 'Λ', '\uf04c': 'Μ',
+                '\uf04d': 'Ν', '\uf04e': 'Ξ', '\uf04f': 'Ο', '\uf050': 'Π',
+                '\uf051': 'Ρ', '\uf052': 'Σ', '\uf053': 'Τ', '\uf054': 'Υ',
+                '\uf055': 'Φ', '\uf056': 'Χ', '\uf057': 'Ψ', '\uf058': 'Ω',
+                # Математические операторы и символы
+                '\uf03d': '=', '\uf02d': '-', '\uf02b': '+', '\uf02f': '/',
+                '\uf027': '*', '\uf03c': '<', '\uf03e': '>', '\uf0b3': '≥',
+                '\uf0b4': '≤', '\uf0b5': '≠', '\uf0b6': '≈', '\uf0b7': '∼',
+                '\uf0b8': '∝', '\uf0b9': '∞', '\uf0ba': '∂', '\uf0bb': '∇',
+                '\uf0bc': '∫', '\uf0bd': '∑', '\uf0be': '∏', '\uf0bf': '√',
+                '\uf0c0': '∛', '\uf0c1': '∜',
+                # Скобки и пунктуация
+                '\uf028': '(', '\uf029': ')', '\uf05b': '[', '\uf05d': ']',
+                '\uf07b': '{', '\uf07d': '}', '\uf03a': ':', '\uf03b': ';',
+                '\uf02c': ',', '\uf02e': '.', '\uf020': ' ',  # пробел иногда нужен
+            }
+    
     
     def __init__(self):
         self._metadata: Dict[str, Any] = {}
+
     
     def load(self, file_path: str) -> str:
-        """
-        Загружает PDF файл и извлекает текст.
-        
-        Args:
-            file_path: Путь к .pdf файлу
-            
-        Returns:
-            Извлеченный текст из PDF
-        """
-        # Проверяем файл
+        # Проверяем файл (метод из базового класса)
         self._validate_file(file_path)
         
         try:
-            import fitz  # PyMuPDF
-        except ImportError:
-            logger.error("PyMuPDF (fitz) не установлен. Установите: pip install PyMuPDF")
-            raise ImportError("Для работы с PDF файлами требуется PyMuPDF. Установите: pip install PyMuPDF")
-        
-        try:
-            text_parts = []
-            page_count = 0
-            total_chars = 0
+            # Извлекаем Markdown-текст (формулы будут в LaTeX-обёртках)
+            # Отключаем обработку изображений и OCR
+            md_text = pymupdf4llm.to_markdown(
+                file_path,
+                ignore_images=False,#True,      # игнорировать растровые изображения
+                ignore_graphics=True,    # игнорировать векторную графику
+                use_ocr=True,#False,           # не использовать OCR
+                force_text=True,
+                write_images=False,      # не сохранять изображения в файлы
+                embed_images=False       # не встраивать изображения в Markdown
+            )
             
-            # Открываем PDF документ
-            with fitz.open(file_path) as doc:
-                page_count = len(doc)
-                
-                for page_num, page in enumerate(doc, start=1):
-                    # Извлекаем текст со страницы
-                    page_text = page.get_text()
-                    text_parts.append(page_text)
-                    total_chars += len(page_text)
-                    
-                    # Добавляем разделитель между страницами (но не после последней)
-                    if page_num < page_count:
-                        text_parts.append(f"\n\n--- Страница {page_num} ---\n\n")
+            # Применяем замену битых символов
+            for bad, good in self.UNICODE_FIX_MAP.items():
+                md_text = md_text.replace(bad, good)
             
-            # Объединяем весь текст
-            full_text = "".join(text_parts)
-            
-            # Сохраняем метаданные
+            # Метаданные
+            file_stats = os.stat(file_path)
             self._metadata = {
                 "file_type": "pdf",
-                "page_count": page_count,
-                "file_size": os.path.getsize(file_path),
-                "total_characters": total_chars,
-                "contains_images": self._check_for_images(file_path) if page_count > 0 else False
+                "file_size": file_stats.st_size,
+                "total_characters": len(md_text),
+                "extraction_tool": "pymupdf4llm"
             }
             
-            logger.info(f"Загружен PDF файл: {file_path}, страниц: {page_count}, символов: {total_chars}")
-            return full_text
+            logger.info(f"Загружен PDF файл: {file_path}, символов: {len(md_text)}")
+            return md_text
             
         except Exception as e:
             logger.error(f"Ошибка при чтении PDF {file_path}: {e}")
             raise ValueError(f"Не удалось прочитать PDF файл {file_path}: {str(e)}")
+
     
     def get_metadata(self) -> Dict[str, Any]:
         return self._metadata.copy()
-    
-    def _check_for_images(self, file_path: str) -> bool:
-        """
-        Проверяет, содержит ли PDF изображения.
-        
-        Args:
-            file_path: Путь к PDF файлу
-            
-        Returns:
-            True если есть изображения
-        """
-        try:
-            import fitz
-            with fitz.open(file_path) as doc:
-                for page in doc:
-                    if page.get_images():
-                        return True
-            return False
-        except:
-            # Если не удалось проверить, возвращаем False
-            return False
         
 class DocxLoader(FileLoader):
     """Загрузчик для DOCX файлов."""
@@ -295,6 +300,98 @@ class DocxLoader(FileLoader):
     def get_metadata(self) -> dict:
         return self._metadata.copy()
     
+# class PdfLoader(FileLoader):
+#     """Загрузчик для PDF файлов (.pdf) с использованием EasyOCR (русский + английский)."""
+#     UNICODE_FIX_MAP = {
+#         # Греческие буквы (строчные)
+#                 '\uf061': 'α', '\uf062': 'β', '\uf063': 'γ', '\uf064': 'δ',
+#                 '\uf065': 'ε', '\uf066': 'ζ', '\uf067': 'η', '\uf068': 'θ',
+#                 '\uf069': 'ι', '\uf06a': 'κ', '\uf06b': 'μ', '\uf06c': 'λ',
+#                 '\uf06d': 'ν', '\uf06e': 'ξ', '\uf06f': 'ο', '\uf070': 'π',
+#                 '\uf071': 'ρ', '\uf072': 'σ', '\uf073': 'σ', '\uf074': 'τ',
+#                 '\uf075': 'υ', '\uf076': 'φ', '\uf077': 'χ', '\uf078': 'ψ',
+#                 '\uf079': 'ω',
+#                 # Греческие буквы (заглавные)
+#                 '\uf041': 'Α', '\uf042': 'Β', '\uf043': 'Γ', '\uf044': 'Δ',
+#                 '\uf045': 'Ε', '\uf046': 'Ζ', '\uf047': 'Η', '\uf048': 'Θ',
+#                 '\uf049': 'Ι', '\uf04a': 'Κ', '\uf04b': 'Λ', '\uf04c': 'Μ',
+#                 '\uf04d': 'Ν', '\uf04e': 'Ξ', '\uf04f': 'Ο', '\uf050': 'Π',
+#                 '\uf051': 'Ρ', '\uf052': 'Σ', '\uf053': 'Τ', '\uf054': 'Υ',
+#                 '\uf055': 'Φ', '\uf056': 'Χ', '\uf057': 'Ψ', '\uf058': 'Ω',
+#                 # Математические операторы и символы
+#                 '\uf03d': '=', '\uf02d': '-', '\uf02b': '+', '\uf02f': '/',
+#                 '\uf027': '*', '\uf03c': '<', '\uf03e': '>', '\uf0b3': '≥',
+#                 '\uf0b4': '≤', '\uf0b5': '≠', '\uf0b6': '≈', '\uf0b7': '∼',
+#                 '\uf0b8': '∝', '\uf0b9': '∞', '\uf0ba': '∂', '\uf0bb': '∇',
+#                 '\uf0bc': '∫', '\uf0bd': '∑', '\uf0be': '∏', '\uf0bf': '√',
+#                 '\uf0c0': '∛', '\uf0c1': '∜',
+#                 # Скобки и пунктуация
+#                 '\uf028': '(', '\uf029': ')', '\uf05b': '[', '\uf05d': ']',
+#                 '\uf07b': '{', '\uf07d': '}', '\uf03a': ':', '\uf03b': ';',
+#                 '\uf02c': ',', '\uf02e': '.', '\uf020': ' ',  # пробел иногда нужен
+#     }
+    
+#     def __init__(self):
+#         self._metadata: Dict[str, Any] = {}
+#         self._ocr_reader = None  
+
+#     def _get_ocr_reader(self):
+#         """Инициализирует EasyOCR (однократно)."""
+#         if self._ocr_reader is None:
+#             # Модели скачаются при первом вызове 
+#             self._ocr_reader = easyocr.Reader(['ru', 'en'], gpu=False, verbose=False)
+#         return self._ocr_reader
+
+#     def _load_with_easyocr(self, file_path: str) -> str:
+#         reader = self._get_ocr_reader()
+#         pdf_document = fitz.open(file_path)
+#         text_parts = []
+#         total_pages = len(pdf_document)
+
+#         for page_num in range(total_pages):
+#             page = pdf_document.load_page(page_num)
+#             pix = page.get_pixmap(dpi=150)
+#             img_bytes = pix.tobytes("png")
+#             pil_img = Image.open(io.BytesIO(img_bytes))
+#             # Преобразуем PIL Image в numpy array (RGB)
+#             img_np = np.array(pil_img)
+            
+#             result = reader.readtext(img_np, detail=0, paragraph=False)
+#             page_text = ' '.join(result)
+#             # Нормализуем пробелы
+#             page_text = re.sub(r'\s+', ' ', page_text).strip()
+#             text_parts.append(page_text)
+#             logger.info(f"Страница {page_num+1} / {total_pages} обработана. Символов: {len(page_text)}")
+        
+#         pdf_document.close()
+#         full_text = '\n\n'.join(text_parts)
+#         logger.info(f"Распознавание завершено. Всего символов: {len(full_text)}")
+#         return full_text
+
+#     def load(self, file_path: str) -> str:
+#         self._validate_file(file_path)
+        
+#         # Получаем количество страниц и размер файла для метаданных
+#         pdf_doc = fitz.open(file_path)
+#         self._metadata['page_count'] = len(pdf_doc)
+#         pdf_doc.close()
+#         self._metadata['file_size'] = os.path.getsize(file_path)
+#         self._metadata['extraction_tool'] = 'easyocr'
+        
+#         # Распознаём текст с помощью EasyOCR
+#         full_text = self._load_with_easyocr(file_path)
+        
+#         # (Опционально) Применяем замену битых символов – на всякий случай, если что-то осталось
+#         for bad, good in self.UNICODE_FIX_MAP.items():
+#             full_text = full_text.replace(bad, good)
+        
+#         self._metadata['total_characters'] = len(full_text)
+#         self._metadata['file_type'] = "pdf"
+#         return full_text
+
+#     def get_metadata(self) -> Dict[str, Any]:
+#         return self._metadata.copy()
+    
 def transcribe_audio_vosk(audio_path: str, model_path: str) -> str:
     """
     Транскрибирует аудиофайл (mp3, wav) с помощью Vosk.
@@ -340,18 +437,75 @@ def transcribe_audio_vosk(audio_path: str, model_path: str) -> str:
                 time.sleep(0.5)
                 os.remove(tmp_wav)
 
+def transcribe_audio_whisper(audio_path: str, model_size: str = "small", device: str = "cpu", compute_type: str = "int8") -> str:
+    """
+    Транскрибирует аудиофайл (mp3, wav) с помощью faster-whisper.
+    model_size: "tiny", "base", "small", "medium", "large-v3-turbo"
+    device: "cpu" или "cuda" (если есть GPU)
+    compute_type: "int8" (для CPU), "float16" (для GPU)
+    """
+    # Если файл не wav, конвертируем во временный wav (частота 16 кГц, моно)
+    if not audio_path.endswith('.wav'):
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_wav = tmp.name
+        FFMPEG_PATH = r"C:\Users\tvn4175\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1-full_build\bin\ffmpeg.exe"
+        cmd = [FFMPEG_PATH, '-i', audio_path, '-ar', '16000', '-ac', '1', '-y', tmp_wav]
+        subprocess.run(cmd, capture_output=True, check=True)
+    else:
+        tmp_wav = audio_path
+
+    try:
+        model = WhisperModel(model_size, device=device, compute_type=compute_type)
+        # Транскрипция с русским языком, жадный поиск, фильтр VAD
+        segments, info = model.transcribe(tmp_wav, beam_size=1, language="ru", vad_filter=True)
+        # Собираем текст
+        full_text = " ".join(seg.text for seg in segments)
+        return full_text
+    finally:
+        # Удаляем временный wav, если он был создан
+        if tmp_wav != audio_path:
+            try:
+                os.remove(tmp_wav)
+            except PermissionError:
+                import time
+                time.sleep(0.5)
+                os.remove(tmp_wav)
+
+# class AudioLoader(FileLoader):
+#     def __init__(self, model_path: str = "models/vosk-model-small-ru-0.22"):
+#         self._metadata = {}
+#         self.model_path = model_path
+
+#     def load(self, file_path: str) -> str:
+#         self._validate_file(file_path)
+#         text = transcribe_audio_vosk(file_path, self.model_path)
+#         self._metadata = {
+#             "file_type": "audio",
+#             "file_size": os.path.getsize(file_path),
+#             "model": "vosk",
+#             "character_count": len(text)
+#         }
+#         return text
+
+#     def get_metadata(self):
+#         return self._metadata.copy()
+
 class AudioLoader(FileLoader):
-    def __init__(self, model_path: str = "models/vosk-model-small-ru-0.22"):
+    def __init__(self, model_size: str = "small", device: str = "cpu", compute_type: str = "int8"):
         self._metadata = {}
-        self.model_path = model_path
+        self.model_size = model_size
+        self.device = device
+        self.compute_type = compute_type
 
     def load(self, file_path: str) -> str:
         self._validate_file(file_path)
-        text = transcribe_audio_vosk(file_path, self.model_path)
+        # Транскрибируем с помощью Whisper
+        text = transcribe_audio_whisper(file_path, self.model_size, self.device, self.compute_type)
         self._metadata = {
             "file_type": "audio",
             "file_size": os.path.getsize(file_path),
-            "model": "vosk",
+            "model": f"whisper_{self.model_size}",
+            "device": self.device,
             "character_count": len(text)
         }
         return text
@@ -359,23 +513,55 @@ class AudioLoader(FileLoader):
     def get_metadata(self):
         return self._metadata.copy()
     
+# class VideoLoader(FileLoader):
+#     def __init__(self, model_path: str = "models/vosk-model-small-ru-0.22"):
+#         self._metadata = {}
+#         self.model_path = model_path
+
+#     def load(self, file_path: str) -> str:
+#         self._validate_file(file_path)
+#         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+#             tmp_audio = tmp.name
+#         cmd = ['ffmpeg', '-i', file_path, '-q:a', '0', '-map', 'a', '-y', tmp_audio]
+#         subprocess.run(cmd, capture_output=True, check=True)
+#         try:
+#             text = transcribe_audio_vosk(tmp_audio, self.model_path)
+#             self._metadata = {
+#                 "file_type": "video",
+#                 "file_size": os.path.getsize(file_path),
+#                 "model": "vosk",
+#                 "character_count": len(text)
+#             }
+#             return text
+#         finally:
+#             if os.path.exists(tmp_audio):
+#                 os.remove(tmp_audio)
+
+#     def get_metadata(self):
+#         return self._metadata.copy()
+
 class VideoLoader(FileLoader):
-    def __init__(self, model_path: str = "models/vosk-model-small-ru-0.22"):
+    def __init__(self, model_size: str = "small", device: str = "cpu", compute_type: str = "int8"):
         self._metadata = {}
-        self.model_path = model_path
+        self.model_size = model_size
+        self.device = device
+        self.compute_type = compute_type
 
     def load(self, file_path: str) -> str:
         self._validate_file(file_path)
+        # Извлекаем аудио во временный mp3
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_audio = tmp.name
-        cmd = ['ffmpeg', '-i', file_path, '-q:a', '0', '-map', 'a', '-y', tmp_audio]
+        FFMPEG_PATH = r"C:\Users\tvn4175\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1-full_build\bin\ffmpeg.exe"
+        cmd = [FFMPEG_PATH, '-i', audio_path, '-ar', '16000', '-ac', '1', '-y', tmp_wav]
         subprocess.run(cmd, capture_output=True, check=True)
         try:
-            text = transcribe_audio_vosk(tmp_audio, self.model_path)
+            text = transcribe_audio_whisper(tmp_audio, self.model_size, self.device, self.compute_type)
             self._metadata = {
                 "file_type": "video",
                 "file_size": os.path.getsize(file_path),
-                "model": "vosk",
+                "model": f"whisper_{self.model_size}",
+                "device": self.device,
                 "character_count": len(text)
             }
             return text

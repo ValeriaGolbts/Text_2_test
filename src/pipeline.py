@@ -34,7 +34,7 @@ class LectureProcessingPipeline:
     
     def __init__(self, 
                  detect_plain_text_formulas: bool = True,
-                 splitter_type: SplitterType = SplitterType.MIXED,
+                 splitter_type: SplitterType = SplitterType.SEMANTIC_EMBEDDING,
                  min_chunk_size: int = 100,
                  max_chunk_size: int = 50000,
                  preserve_original_text: bool = True,
@@ -90,9 +90,9 @@ class LectureProcessingPipeline:
             logger.debug("Шаг 1: Загрузка файла")
             ext = os.path.splitext(file_path)[1].lower()
             if ext == '.mp3':
-                loader = AudioLoader(model_path=self.vosk_model_path)
+                loader = AudioLoader(model_size="small", device="cpu", compute_type="int8")
             elif ext == '.mp4':
-                loader = VideoLoader(model_path=self.vosk_model_path)
+                loader = VideoLoader(model_size="small", device="cpu", compute_type="int8")
             else:
                 loader = FileLoaderFactory.get_loader(file_path)
             raw_content = loader.load(file_path)
@@ -101,10 +101,10 @@ class LectureProcessingPipeline:
             # Шаг 2: Нормализация текста
             logger.debug("Шаг 2: Нормализация текста")
             normalized_content, normalization_stats = self._normalize_text(raw_content)
-            # Шаг 2.1: Очистка текста (для аудио/видео)
-            # if ext in ('.mp3', '.mp4'):
-            #     logger.debug("Шаг 2.5: Очистка текста от нерелевантных фрагментов")
-            #     normalized_content = self.text_cleaner.clean(normalized_content)
+            #Шаг 2.1: Очистка текста (для аудио/видео)
+            if ext in ('.mp3', '.mp4'):
+                logger.debug("Шаг 2.5: Очистка текста от нерелевантных фрагментов")
+                normalized_content = self.text_cleaner.clean(normalized_content)
             
             # Шаг 3.1: Извлечение блоков кода 
             logger.debug("Шаг 3.1: Извлечение блоков кода")
@@ -114,9 +114,23 @@ class LectureProcessingPipeline:
                 normalized_content, code_blocks
             )
             
-            # Шаг 3.2: Поиск и обработка формул в тексте без кода
-            logger.debug("Шаг 3.2: Поиск формул")
-            formula_result = self._extract_formulas(text_with_code_placeholders)
+            # # Шаг 3.2: Поиск и обработка формул в тексте без кода
+            # logger.debug("Шаг 3.2: Поиск формул")
+            # formula_result = self._extract_formulas(text_with_code_placeholders)
+
+            # Шаг 3.2: Поиск и обработка формул (только для текстовых файлов, не для аудио/видео)
+            if ext in ('.mp3', '.mp4'):
+                logger.info("Для аудио/видео поиск формул пропускаем")
+                # Создаём пустой результат: текст без изменений, список формул пуст
+                formula_result = FormulaDetectionResult(
+                    formulas=[],
+                    text_with_placeholders=text_with_code_placeholders,
+                    placeholder_to_formula={},
+                    detection_stats={"skipped": True}
+                )
+            else:
+                logger.debug("Шаг 3.2: Поиск формул")
+                formula_result = self._extract_formulas(text_with_code_placeholders)
             
             # Шаг 4: Разбиение на блоки (текст уже с плейсхолдерами и формул, и кода)
             logger.debug("Шаг 4: Разбиение на блоки")
@@ -352,7 +366,7 @@ class PipelineConfig:
     
     def __init__(self, 
                  detect_plain_text_formulas: bool = True,
-                 splitter_type: SplitterType = SplitterType.MIXED,
+                 splitter_type: SplitterType = SplitterType.SEMANTIC_EMBEDDING,
                  min_chunk_size: int = 100,
                  max_chunk_size: int = 50000,
                  output_format: str = 'json'):

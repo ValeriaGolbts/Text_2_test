@@ -12,6 +12,9 @@ from abc import ABC, abstractmethod
 from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
+from sentence_transformers import SentenceTransformer
+from sklearn.cluster import AgglomerativeClustering
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +25,7 @@ class SplitterType(str, Enum):
     SEMANTIC = "semantic"            # По семантической связности
     FIXED_SIZE = "fixed_size"        # По фиксированному размеру
     MIXED = "mixed"                  # Комбинированная стратегия
+    SEMANTIC_EMBEDDING = "semantic_embedding" #Иерархичекая кластеризация с эмбедингами MiniLM
 
 
 @dataclass
@@ -211,65 +215,6 @@ class ParagraphSplitter(TextSplitter):
         
         return cleaned_paragraphs
     
-    # def _split_large_paragraph(self, paragraph: str, start_pos: int, paragraph_num: int) -> List[TextChunkInfo]:
-    #     """Разбивает большой абзац на части."""
-    #     # Простая стратегия: разбиваем по предложениям
-    #     sentences = re.split(r'(?<=[.!?])\s+', paragraph)
-        
-    #     chunks = []
-    #     current_chunk = []
-    #     current_length = 0
-    #     sentence_pos = 0
-        
-    #     for sentence in sentences:
-    #         sentence_len = len(sentence)
-            
-    #         if current_length + sentence_len > self.config.max_chunk_size and current_chunk:
-    #             # Сохраняем текущий чанк
-    #             chunk_text = ' '.join(current_chunk)
-    #             chunk_id = self._generate_chunk_id(chunk_text, paragraph_num * 1000 + len(chunks))
-                
-    #             chunk = TextChunkInfo(
-    #                 text=chunk_text,
-    #                 start_pos=start_pos + sentence_pos - len(chunk_text),
-    #                 end_pos=start_pos + sentence_pos,
-    #                 chunk_id=chunk_id,
-    #                 metadata={
-    #                     "splitter_type": "paragraph_sentence",
-    #                     "original_paragraph": paragraph_num,
-    #                     "is_header": False
-    #                 }
-    #             )
-    #             chunks.append(chunk)
-                
-    #             # Начинаем новый чанк
-    #             current_chunk = [sentence]
-    #             current_length = sentence_len
-    #         else:
-    #             current_chunk.append(sentence)
-    #             current_length += sentence_len + 1  # +1 для пробела
-            
-    #         sentence_pos += sentence_len + 1
-        
-        # # Добавляем последний чанк
-        # if current_chunk:
-        #     chunk_text = ' '.join(current_chunk)
-        #     chunk_id = self._generate_chunk_id(chunk_text, paragraph_num * 1000 + len(chunks))
-            
-        #     chunk = TextChunkInfo(
-        #         text=chunk_text,
-        #         start_pos=start_pos + sentence_pos - len(chunk_text),
-        #         end_pos=start_pos + sentence_pos,
-        #         chunk_id=chunk_id,
-        #         metadata={
-        #             "splitter_type": "paragraph_sentence",
-        #             "original_paragraph": paragraph_num,
-        #             "is_header": False
-        #         }
-        #     )
-        #     chunks.append(chunk)
-        
-        # return chunks
     
     def _is_header(self, text: str) -> bool:
         """Определяет, является ли текст заголовком."""
@@ -450,8 +395,11 @@ class TextSplitterFactory:
             return FixedSizeSplitter(config)
         elif splitter_type == SplitterType.MIXED:
             return MixedSplitter(config)
+        elif splitter_type == SplitterType.SEMANTIC_EMBEDDING:
+            return SemanticEmbeddingSplitter(config)
         else:
             raise ValueError(f"Неизвестный тип сплиттера: {splitter_type}")
+
 
 
 class FixedSizeSplitter(TextSplitter):
@@ -525,6 +473,107 @@ class MixedSplitter(TextSplitter):
         paragraph_text = "\n\n".join(p.text for p in paragraphs)
         
         return semantic_splitter.split(paragraph_text)
+    
+class SemanticEmbeddingSplitter(TextSplitter):
+    """Разбивает текст на семантические блоки с помощью эмбеддингов и иерархической кластеризации."""
+    
+    def __init__(self, config: SplitterConfig = None, model_name: str = 'paraphrase-multilingual-MiniLM-L12-v2'):
+        super().__init__(config)
+        self.model_name = model_name
+        self.model = None   # ленивая загрузка
+    
+    def _get_model(self):
+        if self.model is None:
+            self.model = SentenceTransformer(self.model_name)
+        return self.model
+    
+    def _split_into_sentences(self, text: str) -> List[str]:
+        """Разбивает текст на предложения по .!? с последующим пробелом."""
+        # Простое разбиение по .!? и пробелу – достаточно для большинства текстов
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        return [s.strip() for s in sentences if s.strip()]
+    
+    def split(self, text: str) -> List[TextChunkInfo]:
+        # 1. Разбиваем на предложения
+        sentences = self._split_into_sentences(text)
+        if len(sentences) <= 1:
+            # Возвращаем один чанк
+            chunk_id = self._generate_chunk_id(text, 0)
+            return [TextChunkInfo(text=text, start_pos=0, end_pos=len(text), chunk_id=chunk_id, metadata={})]
+        
+        # 2. Строим эмбеддинги
+        model = self._get_model()
+        embeddings = model.encode(sentences, convert_to_numpy=True)
+        
+        # 3. Определяем количество кластеров (n_clusters)
+        # Можно задать через конфиг или динамически
+        n_clusters = getattr(self.config, 'target_chunks', None)
+        if n_clusters is None:
+            # По умолчанию: максимальное количество чанков ≈ число предложений / 5 (но не менее 2)
+            n_clusters = max(2, len(sentences) // 5)
+            n_clusters = min(n_clusters, 20)  # ограничим сверху
+        
+        # 4. Кластеризация с ограничением соседства
+        n = len(sentences)
+        connectivity = np.zeros((n, n))
+        for i in range(n - 1):
+            connectivity[i, i+1] = 1
+            connectivity[i+1, i] = 1
+        
+        clustering = AgglomerativeClustering(
+            n_clusters=min(n_clusters, n),
+            metric='cosine',
+            linkage='average',
+            connectivity=connectivity
+        )
+        labels = clustering.fit_predict(embeddings)
+        
+        # 5. Группируем предложения по меткам (с учётом непрерывности)
+        chunks_indices = []
+        cur_label = labels[0]
+        cur = [0]
+        for i in range(1, n):
+            if labels[i] != cur_label:
+                chunks_indices.append(cur)
+                cur = [i]
+                cur_label = labels[i]
+            else:
+                cur.append(i)
+        chunks_indices.append(cur)
+        
+        # 6. Создаём TextChunkInfo, склеивая предложения, и вычисляем позиции в исходном тексте
+        chunks_info = []
+        global_start = 0
+        for idx, indices in enumerate(chunks_indices):
+            chunk_text = ' '.join([sentences[i] for i in indices])
+            # Находим позицию в исходном тексте (приблизительно, через поиск)
+            start_pos = text.find(chunk_text, global_start)
+            if start_pos == -1:
+                # Fallback – ищем по-другому или используем глобальную позицию
+                start_pos = global_start
+            end_pos = start_pos + len(chunk_text)
+            global_start = end_pos
+            chunk_id = self._generate_chunk_id(chunk_text, idx)
+            # Преобразуем метку кластера из numpy.int64 в обычный int
+            cluster_label_val = labels[indices[0]] if indices else 0
+            if hasattr(cluster_label_val, 'item'):
+                cluster_label_val = cluster_label_val.item()
+
+            metadata = {
+                "splitter_type": "semantic_embedding",
+                "num_sentences": len(indices),
+                "cluster_label": int(cluster_label_val),
+                "chunk_index": idx
+            }
+            chunks_info.append(TextChunkInfo(
+                text=chunk_text,
+                start_pos=start_pos,
+                end_pos=end_pos,
+                chunk_id=chunk_id,
+                metadata=metadata
+            ))
+        
+        return chunks_info
 
 
 def split_text(text: str, 

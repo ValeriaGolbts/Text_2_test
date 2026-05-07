@@ -16,7 +16,7 @@ from typing import List, Dict, Any, Set, Tuple, Optional
 from dataclasses import dataclass, field
 from collections import Counter
 
-from src.models import Formula, FormulaType
+from src.data_models import Formula, FormulaType
 
 logger = logging.getLogger(__name__)
 

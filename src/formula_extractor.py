@@ -11,7 +11,7 @@ from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
-from src.models import Formula, FormulaType
+from src.data_models import Formula, FormulaType
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +296,9 @@ class FormulaExtractor:
                 continue
             
             normalized = self._normalize_plain_text_formula(formula_text)
+            # Пропускаем одиночные числа и короткие цифровые последовательности
+            if re.fullmatch(r'[\d\s\.\+\-\*/]*', formula_text) and len(formula_text) < 5:
+                continue
             formula = Formula(
                 original=formula_text,
                 normalized=normalized,
@@ -335,6 +338,10 @@ class FormulaExtractor:
     
     def _looks_like_formula(self, text: str) -> bool:
         """Проверяет, похож ли текст на формулу."""
+
+        # Если строка состоит только из цифр, точки и пробелов, и она короткая – не формула
+        if re.fullmatch(r'[\d\s\.]+', text.strip()) and len(text.strip()) <= 4:
+            return False
         # Должен содержать хотя бы один математический оператор
         if not any(op in text for op in self.math_operators):
             return False
