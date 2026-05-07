@@ -130,22 +130,23 @@ class FormulaExtractor:
         
         # Сброс счетчика плейсхолдеров
         self._placeholder_counter = 0
+        placeholder_map = {}
         
         # Шаг 1: Ищем LaTeX display формулы (\[...\] или $$...$$)
         if methods in [DetectionMethod.LATEX_DISPLAY, DetectionMethod.ALL]:
-            formulas, current_text = self._extract_latex_display(current_text, text)
+            formulas, current_text = self._extract_latex_display(current_text, text, placeholder_map)
             all_formulas.extend(formulas)
             detection_stats["latex_display"] = len(formulas)
         
         # Шаг 2: Ищем LaTeX inline формулы ($...$)
         if methods in [DetectionMethod.LATEX_INLINE, DetectionMethod.ALL]:
-            formulas, current_text = self._extract_latex_inline(current_text, text)
+            formulas, current_text = self._extract_latex_inline(current_text, text, placeholder_map)
             all_formulas.extend(formulas)
             detection_stats["latex_inline"] = len(formulas)
         
         # Шаг 3: Ищем plain-text формулы (если включено)
         if self.detect_plain_text and methods in [DetectionMethod.PLAIN_TEXT, DetectionMethod.ALL]:
-            formulas, current_text = self._extract_plain_text(current_text, text)
+            formulas, current_text = self._extract_plain_text(current_text, text, placeholder_map)
             all_formulas.extend(formulas)
             detection_stats["plain_text"] = len(formulas)
         
@@ -154,26 +155,34 @@ class FormulaExtractor:
         
         # Обновляем общую статистику
         detection_stats["total"] = len(all_formulas)
-        
-        # Создаем маппинг плейсхолдеров
-        placeholder_to_formula = {}
-        for formula in all_formulas:
-            placeholder = f"[[FORMULA_{formula.start_pos}]]"
-            placeholder_to_formula[placeholder] = formula
+    
         
         logger.info(f"Найдено формул: {detection_stats['total']} "
                    f"(LaTeX inline: {detection_stats['latex_inline']}, "
                    f"display: {detection_stats['latex_display']}, "
                    f"plain: {detection_stats['plain_text']})")
         
+        # отладка: посмотрим, какие ключи в словаре, и какие плейсхолдеры в тексте
+        import re
+        placeholders_in_text = set(re.findall(r'\[\[FORMULA_\d+_\d+\]\]', current_text))
+        logger.info(f"Ключей в placeholder_map: {len(placeholder_map)}")
+        logger.info(f"Плейсхолдеров в тексте: {len(placeholders_in_text)}")
+        if placeholder_map:
+            logger.info("Пример ключа из map: %s", next(iter(placeholder_map)))
+        if placeholders_in_text:
+            logger.info("Пример плейсхолдера из текста: %s", next(iter(placeholders_in_text)))
+        logger.info("Совпадают ли множества? %s", set(placeholder_map.keys()) == placeholders_in_text)
+
         return FormulaDetectionResult(
             formulas=all_formulas,
             text_with_placeholders=current_text,
-            placeholder_to_formula=placeholder_to_formula,
+            placeholder_to_formula=placeholder_map,   
             detection_stats=detection_stats
         )
     
-    def _extract_latex_inline(self, text: str, original_text: str) -> Tuple[List[Formula], str]:
+    def _extract_latex_inline(self, text: str, original_text: str, placeholder_map: dict = None) -> Tuple[List[Formula], str]:
+        if placeholder_map is None:
+            placeholder_map = {}
         """
         Извлекает LaTeX inline формулы ($...$).
         
@@ -220,13 +229,15 @@ class FormulaExtractor:
                 
                 # Создаем плейсхолдер
                 placeholder = self._create_placeholder(start_pos)
-                
+                placeholder_map[placeholder] = formula
                 # Заменяем формулу на плейсхолдер в тексте
                 text = text[:match.start()] + placeholder + text[match.end():]
         
         return formulas, text
     
-    def _extract_latex_display(self, text: str, original_text: str) -> Tuple[List[Formula], str]:
+    def _extract_latex_display(self, text: str, original_text: str, placeholder_map: dict = None) -> Tuple[List[Formula], str]:
+        if placeholder_map is None:
+            placeholder_map = {}
         """
         Извлекает LaTeX display формулы (\[...\] или $$...$$).
         
@@ -266,13 +277,16 @@ class FormulaExtractor:
             
             # Создаем плейсхолдер
             placeholder = self._create_placeholder(start_pos)
+            placeholder_map[placeholder] = formula
             
             # Заменяем формулу на плейсхолдер в тексте
             text = text[:match.start()] + placeholder + text[match.end():]
         
         return formulas, text
     
-    def _extract_plain_text(self, text: str, original_text: str) -> Tuple[List[Formula], str]:
+    def _extract_plain_text(self, text: str, original_text: str, placeholder_map: dict = None) -> Tuple[List[Formula], str]:
+        if placeholder_map is None:
+            placeholder_map = {}
         """
         Извлекает plain-text формулы.
         """
@@ -312,6 +326,7 @@ class FormulaExtractor:
         text_with_placeholders = text
         for formula in sorted(formulas, key=lambda f: f.start_pos, reverse=True):
             placeholder = self._create_placeholder(formula.start_pos)
+            placeholder_map[placeholder] = formula
             text_with_placeholders = (
                 text_with_placeholders[:formula.start_pos] 
                 + placeholder 
@@ -380,25 +395,8 @@ class FormulaExtractor:
             return self._normalize_latex_formula(formula_text)
     
     def _normalize_latex_formula(self, formula_text: str) -> str:
-        """Нормализует LaTeX формулу."""
-        # Убираем лишние пробелы
-        formula_text = re.sub(r'\s+', ' ', formula_text.strip())
-        
-        # Заменяем синонимы операторов
-        replacements = {
-            r'\\cdot': '*',
-            r'\\times': '*',
-            r'\^': '**',  # Для Python-стиля
-            r'\\frac\{([^}]+)\}\{([^}]+)\}': r'(\1)/(\2)',
-            r'\\sqrt\{([^}]+)\}': r'sqrt(\1)',
-            r'\\sum_': 'sum_',
-            r'\\int_': 'int_',
-        }
-        
-        for pattern, replacement in replacements.items():
-            formula_text = re.sub(pattern, replacement, formula_text)
-        
-        return formula_text
+        """Минимальная нормализация LaTeX формулы: только убираем лишние пробелы."""
+        return re.sub(r'\s+', ' ', formula_text.strip())
     
     def _normalize_plain_text_formula(self, formula_text: str) -> str:
         """Нормализует plain-text формулу."""

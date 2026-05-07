@@ -253,97 +253,97 @@ class PdfLoader(FileLoader):
     
     def get_metadata(self) -> Dict[str, Any]:
         return self._metadata.copy()
-        
-class DocxLoader(FileLoader):
-    """Загрузчик для DOCX файлов."""
     
+import pypandoc
+
+class DocxLoader(FileLoader):
+    """Загрузчик для DOCX‑файлов. Конвертирует в Markdown с помощью Pandoc,
+    что позволяет извлечь формулы в формате LaTeX ($...$ или $$...$$)."""
+
     def __init__(self):
         self._metadata = {}
-        if Document is None:
-            raise ImportError("Для работы с DOCX требуется python-docx. Установите: pip install python-docx")
-    
+
     def load(self, file_path: str) -> str:
+        # Проверка, что файл существует и не пуст
         self._validate_file(file_path)
-        
+
         try:
-            doc = Document(file_path)
-            paragraphs = []
-            for para in doc.paragraphs:
-                if para.text.strip():
-                    paragraphs.append(para.text)
-            
-            # Также можно извлечь текст из таблиц, если нужно
-            for table in doc.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        cell_text = cell.text.strip()
-                        if cell_text:
-                            paragraphs.append(cell_text)
-            
-            full_text = "\n\n".join(paragraphs)
-            
+            # Конвертация DOCX -> Markdown.
+            # Аргумент '--wrap=none' отключает принудительный перенос строк,
+            # чтобы текст оставался цельным.
+            md_text = pypandoc.convert_file(
+                file_path,
+                'markdown',
+                format='docx',
+                extra_args=['--wrap=none']
+            )
+
+            # Сохраняем метаданные
             self._metadata = {
                 "file_type": "docx",
                 "file_size": os.path.getsize(file_path),
-                "paragraph_count": len(paragraphs),
-                "character_count": len(full_text)
+                "total_characters": len(md_text),
+                "extraction_tool": "pandoc (via pypandoc)",
+                "page_count": None,   # DOCX не хранит точное число страниц
+                "character_count": len(md_text)
             }
-            
-            logger.info(f"Загружен DOCX файл: {file_path}, параграфов: {len(paragraphs)}")
-            return full_text
-            
+
+            logger.info(f"Загружен DOCX файл через Pandoc: {file_path}, символов: {len(md_text)}")
+            return md_text
+
         except Exception as e:
-            logger.error(f"Ошибка при чтении DOCX {file_path}: {e}")
+            logger.error(f"Ошибка при конвертации DOCX в Markdown: {e}")
             raise ValueError(f"Не удалось прочитать DOCX файл {file_path}: {str(e)}")
-    
-    def get_metadata(self) -> dict:
+
+    def get_metadata(self) -> Dict[str, Any]:
         return self._metadata.copy()
+        
+# class DocxLoader(FileLoader):
+#     """Загрузчик для DOCX файлов."""
     
+#     def __init__(self):
+#         self._metadata = {}
+#         if Document is None:
+#             raise ImportError("Для работы с DOCX требуется python-docx. Установите: pip install python-docx")
     
-def transcribe_audio_vosk(audio_path: str, model_path: str) -> str:
-    """
-    Транскрибирует аудиофайл (mp3, wav) с помощью Vosk.
-    model_path: путь к папке с моделью Vosk.
-    """
-    # Если файл не wav, конвертируем во временный wav
-    if not audio_path.endswith('.wav'):
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp_wav = tmp.name
-        cmd = ['ffmpeg', '-i', audio_path, '-ar', '16000', '-ac', '1', '-y', tmp_wav]
-        subprocess.run(cmd, capture_output=True, check=True)
-    else:
-        tmp_wav = audio_path
+#     def load(self, file_path: str) -> str:
+#         self._validate_file(file_path)
+        
+#         try:
+#             doc = Document(file_path)
+#             paragraphs = []
+#             for para in doc.paragraphs:
+#                 if para.text.strip():
+#                     paragraphs.append(para.text)
+            
+#             # Также можно извлечь текст из таблиц, если нужно
+#             for table in doc.tables:
+#                 for row in table.rows:
+#                     for cell in row.cells:
+#                         cell_text = cell.text.strip()
+#                         if cell_text:
+#                             paragraphs.append(cell_text)
+            
+#             full_text = "\n\n".join(paragraphs)
+            
+#             self._metadata = {
+#                 "file_type": "docx",
+#                 "file_size": os.path.getsize(file_path),
+#                 "paragraph_count": len(paragraphs),
+#                 "character_count": len(full_text)
+#             }
+            
+#             logger.info(f"Загружен DOCX файл: {file_path}, параграфов: {len(paragraphs)}")
+#             return full_text
+            
+#         except Exception as e:
+#             logger.error(f"Ошибка при чтении DOCX {file_path}: {e}")
+#             raise ValueError(f"Не удалось прочитать DOCX файл {file_path}: {str(e)}")
+    
+#     def get_metadata(self) -> dict:
+#         return self._metadata.copy()
+    
 
-    try:
-        from vosk import Model, KaldiRecognizer
-        import wave
-        import json
-
-        model = Model(model_path)
-        # Используем with для автоматического закрытия файла
-        with wave.open(tmp_wav, "rb") as wf:
-            rec = KaldiRecognizer(model, wf.getframerate())
-            text_parts = []
-            while True:
-                data = wf.readframes(4000)
-                if len(data) == 0:
-                    break
-                if rec.AcceptWaveform(data):
-                    result = json.loads(rec.Result())
-                    text_parts.append(result.get("text", ""))
-            final = json.loads(rec.FinalResult())
-            text_parts.append(final.get("text", ""))
-            return " ".join(text_parts)
-    finally:
-        # Удаляем временный файл, если он был создан
-        if tmp_wav != audio_path:
-            try:
-                os.remove(tmp_wav)
-            except PermissionError:
-                # Если файл ещё занят, дадим немного времени и повторим
-                import time
-                time.sleep(0.5)
-                os.remove(tmp_wav)
 
 def transcribe_audio_whisper(audio_path: str, model_size: str = "small", device: str = "cpu", compute_type: str = "int8") -> str:
     """
