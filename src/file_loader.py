@@ -11,10 +11,9 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 from pathlib import Path
 from docx import Document
-# import pdfplumber
 import pymupdf4llm
 from faster_whisper import WhisperModel
-# import easyocr
+
 
 import time
 from PIL import Image
@@ -300,97 +299,6 @@ class DocxLoader(FileLoader):
     def get_metadata(self) -> dict:
         return self._metadata.copy()
     
-# class PdfLoader(FileLoader):
-#     """Загрузчик для PDF файлов (.pdf) с использованием EasyOCR (русский + английский)."""
-#     UNICODE_FIX_MAP = {
-#         # Греческие буквы (строчные)
-#                 '\uf061': 'α', '\uf062': 'β', '\uf063': 'γ', '\uf064': 'δ',
-#                 '\uf065': 'ε', '\uf066': 'ζ', '\uf067': 'η', '\uf068': 'θ',
-#                 '\uf069': 'ι', '\uf06a': 'κ', '\uf06b': 'μ', '\uf06c': 'λ',
-#                 '\uf06d': 'ν', '\uf06e': 'ξ', '\uf06f': 'ο', '\uf070': 'π',
-#                 '\uf071': 'ρ', '\uf072': 'σ', '\uf073': 'σ', '\uf074': 'τ',
-#                 '\uf075': 'υ', '\uf076': 'φ', '\uf077': 'χ', '\uf078': 'ψ',
-#                 '\uf079': 'ω',
-#                 # Греческие буквы (заглавные)
-#                 '\uf041': 'Α', '\uf042': 'Β', '\uf043': 'Γ', '\uf044': 'Δ',
-#                 '\uf045': 'Ε', '\uf046': 'Ζ', '\uf047': 'Η', '\uf048': 'Θ',
-#                 '\uf049': 'Ι', '\uf04a': 'Κ', '\uf04b': 'Λ', '\uf04c': 'Μ',
-#                 '\uf04d': 'Ν', '\uf04e': 'Ξ', '\uf04f': 'Ο', '\uf050': 'Π',
-#                 '\uf051': 'Ρ', '\uf052': 'Σ', '\uf053': 'Τ', '\uf054': 'Υ',
-#                 '\uf055': 'Φ', '\uf056': 'Χ', '\uf057': 'Ψ', '\uf058': 'Ω',
-#                 # Математические операторы и символы
-#                 '\uf03d': '=', '\uf02d': '-', '\uf02b': '+', '\uf02f': '/',
-#                 '\uf027': '*', '\uf03c': '<', '\uf03e': '>', '\uf0b3': '≥',
-#                 '\uf0b4': '≤', '\uf0b5': '≠', '\uf0b6': '≈', '\uf0b7': '∼',
-#                 '\uf0b8': '∝', '\uf0b9': '∞', '\uf0ba': '∂', '\uf0bb': '∇',
-#                 '\uf0bc': '∫', '\uf0bd': '∑', '\uf0be': '∏', '\uf0bf': '√',
-#                 '\uf0c0': '∛', '\uf0c1': '∜',
-#                 # Скобки и пунктуация
-#                 '\uf028': '(', '\uf029': ')', '\uf05b': '[', '\uf05d': ']',
-#                 '\uf07b': '{', '\uf07d': '}', '\uf03a': ':', '\uf03b': ';',
-#                 '\uf02c': ',', '\uf02e': '.', '\uf020': ' ',  # пробел иногда нужен
-#     }
-    
-#     def __init__(self):
-#         self._metadata: Dict[str, Any] = {}
-#         self._ocr_reader = None  
-
-#     def _get_ocr_reader(self):
-#         """Инициализирует EasyOCR (однократно)."""
-#         if self._ocr_reader is None:
-#             # Модели скачаются при первом вызове 
-#             self._ocr_reader = easyocr.Reader(['ru', 'en'], gpu=False, verbose=False)
-#         return self._ocr_reader
-
-#     def _load_with_easyocr(self, file_path: str) -> str:
-#         reader = self._get_ocr_reader()
-#         pdf_document = fitz.open(file_path)
-#         text_parts = []
-#         total_pages = len(pdf_document)
-
-#         for page_num in range(total_pages):
-#             page = pdf_document.load_page(page_num)
-#             pix = page.get_pixmap(dpi=150)
-#             img_bytes = pix.tobytes("png")
-#             pil_img = Image.open(io.BytesIO(img_bytes))
-#             # Преобразуем PIL Image в numpy array (RGB)
-#             img_np = np.array(pil_img)
-            
-#             result = reader.readtext(img_np, detail=0, paragraph=False)
-#             page_text = ' '.join(result)
-#             # Нормализуем пробелы
-#             page_text = re.sub(r'\s+', ' ', page_text).strip()
-#             text_parts.append(page_text)
-#             logger.info(f"Страница {page_num+1} / {total_pages} обработана. Символов: {len(page_text)}")
-        
-#         pdf_document.close()
-#         full_text = '\n\n'.join(text_parts)
-#         logger.info(f"Распознавание завершено. Всего символов: {len(full_text)}")
-#         return full_text
-
-#     def load(self, file_path: str) -> str:
-#         self._validate_file(file_path)
-        
-#         # Получаем количество страниц и размер файла для метаданных
-#         pdf_doc = fitz.open(file_path)
-#         self._metadata['page_count'] = len(pdf_doc)
-#         pdf_doc.close()
-#         self._metadata['file_size'] = os.path.getsize(file_path)
-#         self._metadata['extraction_tool'] = 'easyocr'
-        
-#         # Распознаём текст с помощью EasyOCR
-#         full_text = self._load_with_easyocr(file_path)
-        
-#         # (Опционально) Применяем замену битых символов – на всякий случай, если что-то осталось
-#         for bad, good in self.UNICODE_FIX_MAP.items():
-#             full_text = full_text.replace(bad, good)
-        
-#         self._metadata['total_characters'] = len(full_text)
-#         self._metadata['file_type'] = "pdf"
-#         return full_text
-
-#     def get_metadata(self) -> Dict[str, Any]:
-#         return self._metadata.copy()
     
 def transcribe_audio_vosk(audio_path: str, model_path: str) -> str:
     """
@@ -471,24 +379,6 @@ def transcribe_audio_whisper(audio_path: str, model_size: str = "small", device:
                 time.sleep(0.5)
                 os.remove(tmp_wav)
 
-# class AudioLoader(FileLoader):
-#     def __init__(self, model_path: str = "models/vosk-model-small-ru-0.22"):
-#         self._metadata = {}
-#         self.model_path = model_path
-
-#     def load(self, file_path: str) -> str:
-#         self._validate_file(file_path)
-#         text = transcribe_audio_vosk(file_path, self.model_path)
-#         self._metadata = {
-#             "file_type": "audio",
-#             "file_size": os.path.getsize(file_path),
-#             "model": "vosk",
-#             "character_count": len(text)
-#         }
-#         return text
-
-#     def get_metadata(self):
-#         return self._metadata.copy()
 
 class AudioLoader(FileLoader):
     def __init__(self, model_size: str = "small", device: str = "cpu", compute_type: str = "int8"):
@@ -513,32 +403,6 @@ class AudioLoader(FileLoader):
     def get_metadata(self):
         return self._metadata.copy()
     
-# class VideoLoader(FileLoader):
-#     def __init__(self, model_path: str = "models/vosk-model-small-ru-0.22"):
-#         self._metadata = {}
-#         self.model_path = model_path
-
-#     def load(self, file_path: str) -> str:
-#         self._validate_file(file_path)
-#         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
-#             tmp_audio = tmp.name
-#         cmd = ['ffmpeg', '-i', file_path, '-q:a', '0', '-map', 'a', '-y', tmp_audio]
-#         subprocess.run(cmd, capture_output=True, check=True)
-#         try:
-#             text = transcribe_audio_vosk(tmp_audio, self.model_path)
-#             self._metadata = {
-#                 "file_type": "video",
-#                 "file_size": os.path.getsize(file_path),
-#                 "model": "vosk",
-#                 "character_count": len(text)
-#             }
-#             return text
-#         finally:
-#             if os.path.exists(tmp_audio):
-#                 os.remove(tmp_audio)
-
-#     def get_metadata(self):
-#         return self._metadata.copy()
 
 class VideoLoader(FileLoader):
     def __init__(self, model_size: str = "small", device: str = "cpu", compute_type: str = "int8"):

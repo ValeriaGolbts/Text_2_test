@@ -171,8 +171,6 @@ class TextNormalizer:
             Очищенный текст
         """
         if self.preserve_formula_placeholders:
-            # Если нужно сохранить формулы, делаем это более аккуратно
-            # Пока просто удаляем управляющие символы
             return self.special_chars_pattern.sub('', text)
         else:
             # Более агрессивная очистка
