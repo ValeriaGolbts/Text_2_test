@@ -47,7 +47,7 @@ class StrategyRandomChunks:
         if random_seed is not None:
             random.seed(random_seed)
         print(f"Инициализирована стратегия S1 (случайные чанки)")
-        print(f"  Random seed: {random_seed if random_seed else 'не задан'}")
+        print(f"  • Random seed: {random_seed if random_seed else 'не задан'}")
     
     def get_chunk_range(self, json_path: str) -> Tuple[int, int]:
         """
@@ -58,11 +58,11 @@ class StrategyRandomChunks:
         """
         try:
             max_chunks, min_chunks = get_chunk_range(json_path, verbose=False)
-            print(f"  Диапазон от chunk_range_calculator: MIN={min_chunks}, MAX={max_chunks}")
+            print(f"  • Диапазон от chunk_range_calculator: MIN={min_chunks}, MAX={max_chunks}")
             return max_chunks, min_chunks
         except Exception as e:
-            print(f"  Ошибка получения диапазона: {e}")
-            print(f"  Использую значения по умолчанию: MIN=3, MAX=8")
+            print(f"  • Ошибка получения диапазона: {e}")
+            print(f"  • Использую значения по умолчанию: MIN=3, MAX=8")
             return 8, 3
     
     def select_random_chunks(self, chunks: List[Dict], min_chunks: int, max_chunks: int) -> Tuple[List[Dict], int, List[int]]:
@@ -154,43 +154,56 @@ class StrategyRandomChunks:
             "medium": "Средние вопросы на применение формул и понимание связей между концепциями",
             "hard": "Сложные вопросы на анализ, синтез и решение нетривиальных задач"
         }
-                          
+        
+        # Шаблон JSON выносим отдельно
+        json_example = '''{
+    "test_title": "Название теста (по теме материала)",
+    "subject": "Предмет/тема",
+    "difficulty": "medium",
+    "num_questions": 5,
+    "questions": [
+        {
+            "id": 1,
+            "question": "Текст вопроса",
+            "type": "closed",
+            "options": ["Вариант А", "Вариант Б", "Вариант В", "Вариант Г"],
+            "correct_answer": "Вариант А",
+            "explanation": "Краткое пояснение"
+        },
+        {
+            "id": 2,
+            "question": "Текст открытого вопроса",
+            "type": "open",
+            "expected_answer": "Ожидаемый ответ или ключевые моменты",
+            "explanation": "Пояснение"
+        }
+    ]
+}'''
+        
         prompt = f"""Ты — эксперт по генерации учебных тестов для студентов магистратуры по точным наукам.
 
 ПАРАМЕТРЫ ТЕСТА:
 - Количество вопросов: {num_questions}
 - Сложность: {difficulty} - {difficulty_map.get(difficulty, difficulty_map['medium'])}
 - Типы вопросов: {types_instruction}
-ИСХОДНЫЙ МАТЕРИАЛ (случайно выбранные фрагменты):
+
+ИСХОДНЫЙ МАТЕРИАЛ (случайно выбранные фрагменты лекции):
 {context}
 
 ТРЕБОВАНИЯ К ТЕСТУ:
-1. Все вопросы должны быть строго по содержанию материала
-2. Каждый вопрос должен иметь 4 варианта ответа
-3. Только один вариант ответа правильный
-4. Вопросы должны проверять понимание ключевых концепций
-5. Избегай тривиальных и очевидных вопросов
-6. Включи вопросы разной сложности
+1. Все вопросы должны быть строго по содержанию предоставленного материала
+2. Не придумывай факты, которых нет в тексте
+3. Вопросы должны проверять понимание ключевых концепций и формул
+4. Используй математические обозначения и формулы там, где это уместно
+5. Для закрытых вопросов создай 4 варианта, один правильный
+6. Для открытых вопросов ожидай развернутый ответ
 
-ФОРМАТ ОТВЕТА (ТОЛЬКО JSON, без пояснений):
-{{
-    "test_title": "Название теста по теме материала",
-    "subject": "Определенная тема",
-    "difficulty": "medium",
-    "questions": [
-        {{
-            "id": 1,
-            "question": "Текст вопроса",
-            "options": ["Вариант А", "Вариант Б", "Вариант В", "Вариант Г"],
-            "correct_answer": "Вариант А",
-            "explanation": "Краткое пояснение правильного ответа"
-        }}
-    ]
-}}
+ФОРМАТ ОТВЕТА (ТОЛЬКО JSON, без пояснений). Пример:
+{json_example}
 
-ВАЖНО: Верни ТОЛЬКО JSON, без дополнительного текста."""
-    
-    return prompt
+ВАЖНО: Верни ТОЛЬКО JSON, без дополнительного текста перед или после."""
+        
+        return prompt
     
     async def generate_test(self, 
                            json_path: str,
