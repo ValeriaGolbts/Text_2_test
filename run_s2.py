@@ -414,16 +414,25 @@ class PipelineJSONProcessor:
             
             print(f"✅ Ответ получен")
             
-            # 8. Извлекаем JSON
             content = response['choices'][0]['message']['content']
-            #добавляем парсинг 
+            
+            # Исправленная функция очистки LaTeX
             def clean_json_for_parsing(json_str: str) -> str:
                 """Очищает JSON строку от проблемных LaTeX символов"""
-                # Заменяем одиночные бэкслеши перед буквами на двойные
-                # \f -> \\f, \p -> \\p, и т.д.
-                cleaned = re.sub(r'\\([a-zA-Z])', r'\\\\\1', json_str)
+                # Заменяем все одиночные бэкслеши на двойные
+                # Но сохраняем уже правильные escape-последовательности (\n, \t, \", \\)
+                cleaned = json_str.replace('\\\\', '<<<DOUBLE_BACKSLASH>>>')  # Сохраняем \\
+                cleaned = cleaned.replace('\\"', '<<<ESCAPED_QUOTE>>>')       # Сохраняем \"
+                cleaned = cleaned.replace('\\n', '<<<NEWLINE>>>')             # Сохраняем \n
+                cleaned = cleaned.replace('\\t', '<<<TAB>>>')                 # Сохраняем \t
+                cleaned = cleaned.replace('\\', '\\\\')                        # Экранируем все оставшиеся \
+                cleaned = cleaned.replace('<<<DOUBLE_BACKSLASH>>>', '\\\\\\\\') # Возвращаем \\
+                cleaned = cleaned.replace('<<<ESCAPED_QUOTE>>>', '\\"')       # Возвращаем \"
+                cleaned = cleaned.replace('<<<NEWLINE>>>', '\\n')             # Возвращаем \n
+                cleaned = cleaned.replace('<<<TAB>>>', '\\t')                 # Возвращаем \t
                 return cleaned
-            json_match = re.search(r'```json\n(.*?)\n```', content, re.DOTALL)
+            
+            json_match = re.search(r'```json\s*\n(.*?)\n\s*```', content, re.DOTALL)
             if json_match:
                 json_str = json_match.group(1)
             else:
@@ -437,11 +446,12 @@ class PipelineJSONProcessor:
             
             json_str = json_str.strip()
             if json_str.startswith('```'):
-                json_str = json_str.split('```')
+                parts = json_str.split('```')  # ← ИСПРАВЛЕНО: было parts, а не json_str
                 json_str = parts[1] if len(parts) > 1 else json_str
                 if json_str.startswith('json'):
                     json_str = json_str[4:]
             json_str = json_str.strip()
+            
             # Парсим JSON с несколькими попытками
             test_result = None
                                
@@ -502,34 +512,6 @@ class PipelineJSONProcessor:
                 "pipeline_metadata": metadata,
                 "selection_info": selection_info
             }
-    
-    def save_result(self, result: Dict[str, Any], output_path: str = None):
-        """Сохраняет результат в JSON файл"""
-        if not output_path:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = f"test_result_{timestamp}.json"
-        
-        # Если есть сырой ответ - сохраняем и его
-        if "raw_response" in result:
-            raw_path = output_path.replace('.json', '_raw.txt')
-            with open(raw_path, 'w', encoding='utf-8') as f:
-                f.write(result["raw_response"])
-            print(f"💾 Сырой ответ сохранён: {raw_path}")
-        
-        # Сохраняем JSON (конвертируем сложные объекты в строки)
-        try:
-            serializable_result = json.loads(
-                json.dumps(result, ensure_ascii=False, default=str)
-            )
-        except:
-            # Если не получается сериализовать - сохраняем как есть
-            serializable_result = result
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(serializable_result, f, ensure_ascii=False, indent=2)
-        
-        print(f"💾 Результат сохранён: {output_path}")
-        return output_path
            
 
 async def main():
