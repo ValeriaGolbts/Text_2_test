@@ -258,7 +258,7 @@ def get_chunk_range(json_path: str,
     
     # Вывод информации
     if verbose:
-        print("📊 РАСЧЕТ ДИАПАЗОНА ЧАНКОВ С УЧЕТОМ КОНТЕКСТНОГО ОКНА")
+        print(" РАСЧЕТ ДИАПАЗОНА ЧАНКОВ С УЧЕТОМ КОНТЕКСТНОГО ОКНА")
         
         print(f" Контекстное окно: {config['context_window']:,} токенов")
         print(f" Макс. длина ответа: {config['max_output_tokens']:,} токенов")
@@ -266,8 +266,8 @@ def get_chunk_range(json_path: str,
         
         print("\n РАСХОД ТОКЕНОВ НА ПРОМПТ (OVERHEAD):")
         for key, value in PROMPT_OVERHEAD.items():
-            print(f"   • {key}: {value:,} токенов")
-        print(f"   • ИТОГО overhead: {TOTAL_PROMPT_OVERHEAD:,} токенов")
+            print(f"   {key}: {value:,} токенов")
+        print(f" ИТОГО overhead: {TOTAL_PROMPT_OVERHEAD:,} токенов")
         
         print("\n СТАТИСТИКА ЧАНКОВ:")
         print(f" Всего чанков: {stats['total_chunks']}")
