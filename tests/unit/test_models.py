@@ -4,7 +4,7 @@
 
 import pytest
 from datetime import datetime
-from src.models import Formula, FormulaType, TextChunk, ProcessingStats, ProcessingResult
+from src.data_models import Formula, FormulaType, TextChunk, ProcessingStats, ProcessingResult
 
 
 class TestFormula:

@@ -9,7 +9,7 @@ def test_environment():
 def test_import():
     """Проверяем, что можем импортировать наши модули."""
     try:
-        from src.models import Formula, TextChunk
+        from src.data_models import Formula, TextChunk
         from src.file_loader import FileLoaderFactory
         assert True
     except ImportError as e:

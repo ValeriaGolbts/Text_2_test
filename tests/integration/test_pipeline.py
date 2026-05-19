@@ -6,7 +6,7 @@ import os
 import tempfile
 import pytest
 from src.pipeline import LectureProcessingPipeline, process_file
-from src.models import BlockType
+from src.data_models import BlockType
 
 
 class TestPipeline:

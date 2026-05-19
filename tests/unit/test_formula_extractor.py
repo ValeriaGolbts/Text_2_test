@@ -11,7 +11,7 @@ from src.formula_extractor import (
     extract_formulas,
     replace_formulas_with_placeholders
 )
-from src.models import FormulaType
+from src.data_models import FormulaType
 
 
 class TestFormulaExtractorBasics:

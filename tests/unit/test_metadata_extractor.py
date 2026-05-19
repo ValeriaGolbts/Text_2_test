@@ -11,7 +11,7 @@ from src.metadata_extractor import (
     CompositeMetadataExtractor,
     extract_metadata
 )
-from src.models import Formula, FormulaType
+from src.data_models import Formula, FormulaType
 
 
 class TestFormulaPresenceExtractor:
