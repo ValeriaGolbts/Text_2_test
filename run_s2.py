@@ -1,3 +1,25 @@
+import json
+import asyncio
+import sys
+import re
+from pathlib import Path
+from typing import List, Dict, Any, Tuple  # Добавлен Tuple
+
+# Добавляем путь к проекту
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+
+from api_client_b2b import GigaChatB2BClient
+from config import config
+
+# Импортируем функции расчёта чанков
+from chunk_range_calculator import (
+    analyze_chunks_detailed,
+    calculate_max_chunks,
+    calculate_min_chunks,
+    MODEL_CONFIG,
+    TOTAL_PROMPT_OVERHEAD
+)
 def select_chunks_80_percent(self, pipeline_data: Dict[str, Any]) -> Tuple[List[Dict], Dict]:
     """
     Отбирает чанки по стратегии 80% покрытия материала.
