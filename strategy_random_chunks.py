@@ -16,6 +16,7 @@ import asyncio
 import sys
 import random
 from pathlib import Path
+import re
 from typing import List, Dict, Any, Tuple, Optional
 
 # Добавляем путь к проекту
