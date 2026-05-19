@@ -50,6 +50,54 @@ class StrategyRandomChunks:
         print(f"Инициализирована стратегия S1 (случайные чанки)")
         print(f"  • Random seed: {random_seed if random_seed else 'не задан'}")
     
+    def fix_json_escapes(self, json_str: str) -> str:
+        """
+        Исправляет проблемы с экранированием в JSON строке.
+        Основная проблема: обратные слеши в LaTeX формулах (\sqrt, \frac и т.д.)
+        должны быть экранированы как \\sqrt, \\frac в JSON.
+        
+        Args:
+            json_str: строка с потенциально некорректным экранированием
+            
+        Returns:
+            исправленная JSON строка
+        """
+        # Заменяем одиночные обратные слеши на двойные, 
+        # но только те, которые не являются частью escape-последовательностей
+        # Сначала заменим известные LaTeX команды
+        latex_commands = [
+            'sqrt', 'frac', 'sum', 'int', 'prod', 'lim', 'infty',
+            'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'theta',
+            'lambda', 'mu', 'pi', 'sigma', 'omega', 'partial',
+            'nabla', 'rightarrow', 'leftarrow', 'Rightarrow',
+            'Leftrightarrow', 'cdot', 'times', 'div', 'pm', 'mp',
+            'leq', 'geq', 'neq', 'approx', 'equiv', 'sim', 'propto',
+            'subseteq', 'supseteq', 'cup', 'cap', 'emptyset',
+            'forall', 'exists', 'in', 'notin', 'subset', 'supset',
+            'mathbb', 'mathcal', 'mathbf', 'mathrm', 'mathit',
+            'text', 'overline', 'underline', 'hat', 'tilde', 'vec',
+            'dot', 'ddot', 'bar', 'widehat', 'widetilde'
+        ]
+        
+        # Экранируем обратные слеши перед LaTeX командами
+        for cmd in latex_commands:
+            # Заменяем \команда на \\команда, но не \\команда на \\\команда
+            json_str = re.sub(
+                r'(?<!\\)\\' + cmd + r'\b',
+                r'\\\\' + cmd,
+                json_str
+            )
+        
+        # Также экранируем обратные слеши перед {, }, [, ], (, )
+        for char in ['{', '}', '[', ']', '(', ')']:
+            json_str = re.sub(
+                r'(?<!\\)\\' + re.escape(char),
+                r'\\\\' + char,
+                json_str
+            )
+        
+        return json_str
+    
     def get_chunk_range(self, json_path: str) -> Tuple[int, int]:
         """
         Получает диапазон чанков из chunk_range_calculator.py.
