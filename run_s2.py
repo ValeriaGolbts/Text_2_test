@@ -416,28 +416,73 @@ class PipelineJSONProcessor:
             
             # 8. Извлекаем JSON
             content = response['choices'][0]['message']['content']
-            
+            #добавляем парсинг 
+            def clean_json_for_parsing(json_str: str) -> str:
+                """Очищает JSON строку от проблемных LaTeX символов"""
+                # Заменяем одиночные бэкслеши перед буквами на двойные
+                # \f -> \\f, \p -> \\p, и т.д.
+                cleaned = re.sub(r'\\([a-zA-Z])', r'\\\\\1', json_str)
+                return cleaned
             json_match = re.search(r'```json\n(.*?)\n```', content, re.DOTALL)
             if json_match:
                 json_str = json_match.group(1)
             else:
-                json_str = content
+                # Ищем JSON без маркеров (от первой { до последней })
+                start = content.find('{')
+                end = content.rfind('}')
+                if start != -1 and end != -1:
+                    json_str = content[start:end+1]
+                else:
+                    json_str = content
             
             json_str = json_str.strip()
             if json_str.startswith('```'):
-                json_str = json_str.split('```')[1]
+                json_str = json_str.split('```')
+                json_str = parts[1] if len(parts) > 1 else json_str
                 if json_str.startswith('json'):
                     json_str = json_str[4:]
-            
+            json_str = json_str.strip()
+            # Парсим JSON с несколькими попытками
+            test_result = None
+                               
             try:
                 test_result = json.loads(json_str)
-            except:
-                json_pattern = r'\{.*\}'
-                match = re.search(json_pattern, json_str, re.DOTALL)
-                if match:
-                    test_result = json.loads(match.group())
-                else:
-                    test_result = {"raw_response": content, "questions": []}
+                print("  ✅ JSON успешно распарсен")
+            except json.JSONDecodeError as e:
+                print(f"  ⚠ Ошибка JSON (попытка 1): {e}")
+                
+                try:
+                    cleaned_json = clean_json_for_parsing(json_str)
+                    test_result = json.loads(cleaned_json)
+                    print("  ✅ JSON распарсен после очистки LaTeX")
+                except json.JSONDecodeError as e2:
+                    print(f"  ⚠ Ошибка JSON (попытка 2): {e2}")
+                    
+                    try:
+                        json_pattern = r'\{(?:[^{}]|(?:\{[^{}]*\}))*\}'
+                        match = re.search(json_pattern, json_str, re.DOTALL)
+                        if match:
+                            found_json = match.group()
+                            try:
+                                test_result = json.loads(found_json)
+                            except:
+                                cleaned = clean_json_for_parsing(found_json)
+                                test_result = json.loads(cleaned)
+                            print("  ✅ JSON найден через регулярку")
+                    except Exception as e3:
+                        print(f"  ⚠ Ошибка JSON (попытка 3): {e3}")
+                        
+                        try:
+                            no_latex = re.sub(r'\\[a-zA-Z]+', '', json_str)
+                            test_result = json.loads(no_latex)
+                            print("  ✅ JSON распарсен после удаления LaTeX")
+                        except Exception as e4:
+                            print(f"  ⚠ Все попытки парсинга не удались")
+                            test_result = {
+                                "raw_response": content,
+                                "questions": [],
+                                "parse_error": str(e4)
+                            }
             
             # 9. Добавляем метаданные
             test_result['pipeline_metadata'] = metadata
@@ -463,26 +508,29 @@ class PipelineJSONProcessor:
         if not output_path:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = f"test_result_{timestamp}.json"
-    
-    # Если есть сырой ответ - сохраняем и его
+        
+        # Если есть сырой ответ - сохраняем и его
         if "raw_response" in result:
             raw_path = output_path.replace('.json', '_raw.txt')
             with open(raw_path, 'w', encoding='utf-8') as f:
                 f.write(result["raw_response"])
             print(f"💾 Сырой ответ сохранён: {raw_path}")
-    
-    # Сохраняем JSON (конвертируем сложные объекты в строки)
+        
+        # Сохраняем JSON (конвертируем сложные объекты в строки)
         try:
-            serializable_result = json.loads( json.dumps(result, ensure_ascii=False, default=str) )
+            serializable_result = json.loads(
+                json.dumps(result, ensure_ascii=False, default=str)
+            )
         except:
             # Если не получается сериализовать - сохраняем как есть
             serializable_result = result
+        
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(serializable_result, f, ensure_ascii=False, indent=2)
-    
+        
         print(f"💾 Результат сохранён: {output_path}")
         return output_path
-    
+           
 
 async def main():
     """Основная функция"""
