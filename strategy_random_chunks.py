@@ -227,13 +227,13 @@ class StrategyRandomChunks:
             Результат с тестом и метаданными
         """
         
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("СТРАТЕГИЯ S1: СЛУЧАЙНЫЙ ВЫБОР ЧАНКОВ")
-        print("="*60)
+        print("=" * 60)
         
         # 1. Загружаем JSON
         if verbose:
-            print(f"\n Загрузка: {json_path}")
+            print(f"\n📂 Загрузка: {json_path}")
         
         with open(json_path, 'r', encoding='utf-8') as f:
             pipeline_data = json.load(f)
@@ -244,7 +244,7 @@ class StrategyRandomChunks:
         
         total_chunks = len(chunks)
         if verbose:
-            print(f" Всего чанков: {total_chunks}")
+            print(f"📦 Всего чанков: {total_chunks}")
         
         # 2. Получаем диапазон
         max_chunks, min_chunks = self.get_chunk_range(json_path)
@@ -254,13 +254,17 @@ class StrategyRandomChunks:
             chunks, min_chunks, max_chunks
         )
         
+        # Проверка: есть ли выбранные чанки
+        if not selected_chunks:
+            return {"error": "Не удалось выбрать чанки для генерации теста"}
+        
         # 4. Извлекаем текст и формулы
         texts = self.extract_text_from_chunks(selected_chunks)
         formulas = self.get_formulas_from_chunks(selected_chunks)
         
         if verbose:
-            print(f"\n Извлечено текста: {len(texts)} блоков")
-            print(f" Формул в выбранных чанках: {len(formulas)}")
+            print(f"\n📝 Извлечено текста: {len(texts)} блоков")
+            print(f"🧮 Формул в выбранных чанках: {len(formulas)}")
         
         # 5. Получаем метаданные
         metadata = {
@@ -289,7 +293,7 @@ class StrategyRandomChunks:
         prompt = self.create_prompt(texts, num_questions, difficulty, question_types)
         
         if verbose:
-            print(f"\n Отправка в GigaChat")
+            print(f"\n🚀 Отправка в GigaChat")
             print(f"  • Вопросов: {num_questions}")
             print(f"  • Сложность: {difficulty}")
             print(f"  • Типы: {question_types}")
@@ -312,7 +316,6 @@ class StrategyRandomChunks:
             content = response['choices'][0]['message']['content']
             
             # Очистка от маркеров кода
-            import re
             json_match = re.search(r'```json\n(.*?)\n```', content, re.DOTALL)
             if json_match:
                 json_str = json_match.group(1)
@@ -324,12 +327,16 @@ class StrategyRandomChunks:
                 else:
                     json_str = content
             
-            # Парсим
+            # Исправляем экранирование обратных слешей (проблема с \sqrt и т.д.)
+            json_str = self.fix_json_escapes(json_str)
+            
+            # Парсим JSON
             try:
                 test_result = json.loads(json_str)
             except json.JSONDecodeError as e:
                 if verbose:
                     print(f"⚠️ Ошибка парсинга JSON: {e}")
+                    print(f"   Проблемный фрагмент: {json_str[:500]}...")
                 test_result = {"raw_response": content, "questions": [], "parse_error": str(e)}
             
             # 9. Добавляем метаданные
@@ -347,7 +354,7 @@ class StrategyRandomChunks:
             return test_result
             
         except Exception as e:
-            print(f" Ошибка: {e}")
+            print(f"❌ Ошибка при отправке запроса: {e}")
             return {"error": str(e), "strategy_metadata": metadata}
     
     def save_result(self, result: Dict[str, Any], strategy_name: str = "S1_random") -> str:
@@ -377,7 +384,7 @@ async def main():
     
     # Проверяем существование
     if not Path(json_file).exists():
-        print(f" Файл не найден: {json_file}")
+        print(f"❌ Файл не найден: {json_file}")
         
         # Ищем в текущей папке
         current_dir = Path(__file__).parent
@@ -387,7 +394,7 @@ async def main():
             for f in possible_files:
                 print(f"  • {f}")
             json_file = str(possible_files[0])
-            print(f"\n Использую: {json_file}")
+            print(f"\n📁 Использую: {json_file}")
         else:
             return
     
@@ -412,34 +419,36 @@ async def main():
     )
     
     # Выводим результат
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("📊 РЕЗУЛЬТАТ ТЕСТА")
-    print("="*60)
+    print("=" * 60)
     
     if 'error' in result:
-        print(f"Ошибка: {result['error']}")
+        print(f"❌ Ошибка: {result['error']}")
     else:
-        print(f"Название: {result.get('test_title', 'Не указано')}")
-        print(f"Предмет: {result.get('subject', 'Не указан')}")
-        print(f"Сложность: {result.get('difficulty', 'Не указана')}")
-        print(f"Вопросов: {len(result.get('questions', []))}")
+        print(f"📚 Название: {result.get('test_title', 'Не указано')}")
+        print(f"📖 Предмет: {result.get('subject', 'Не указан')}")
+        print(f"⭐ Сложность: {result.get('difficulty', 'Не указана')}")
+        print(f"❓ Вопросов: {len(result.get('questions', []))}")
         
         # Статистика по чанкам
         meta = result.get('strategy_metadata', {})
-        print(f"\nСтатистика стратегии:")
-        print(f" Использовано чанков: {meta.get('chunks_used', '?')} из {meta.get('total_chunks_original', '?')}")
-        print(f" Формул в чанках: {meta.get('total_formulas_in_chunks', '?')}")
-        print(f" Диапазон: [{meta.get('strategy_params', {}).get('min_chunks', '?')}, {meta.get('strategy_params', {}).get('max_chunks', '?')}]")
+        print(f"\n📊 Статистика стратегии:")
+        print(f"  • Использовано чанков: {meta.get('chunks_used', '?')} из {meta.get('total_chunks_original', '?')}")
+        print(f"  • Формул в чанках: {meta.get('total_formulas_in_chunks', '?')}")
+        print(f"  • Диапазон: [{meta.get('strategy_params', {}).get('min_chunks', '?')}, {meta.get('strategy_params', {}).get('max_chunks', '?')}]")
         
         # Показываем первый вопрос
         questions = result.get('questions', [])
         if questions:
-            print(f"\n Пример вопроса:")
+            print(f"\n📝 Пример вопроса:")
             q = questions[0]
-            print(f"  {q.get('question', '')[:150]}...")
+            question_text = q.get('question', '')[:150]
+            print(f"  {question_text}...")
             if q.get('type') == 'closed':
                 print(f"  Варианты: {q.get('options', [])}")
-            print(f"  Ответ: {q.get('correct_answer', q.get('expected_answer', ''))[:100]}")
+            answer = q.get('correct_answer', q.get('expected_answer', ''))[:100]
+            print(f"  Ответ: {answer}")
 
 
 if __name__ == "__main__":
