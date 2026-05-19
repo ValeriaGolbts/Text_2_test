@@ -206,7 +206,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
 
 if __name__ == "__main__":
     # Пример использования
-    input_json = "test_result_20260424_140612.json"   # ваш файл
+    input_json = "test_result_S1_random_lecture_20260519_191606.json"   # ваш файл
     output_pdf = "questions_with_formulas.pdf"
     if os.path.exists(input_json):
         json_to_pdf_questions_only(input_json, output_pdf)
