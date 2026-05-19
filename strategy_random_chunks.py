@@ -47,7 +47,7 @@ class StrategyRandomChunks:
         if random_seed is not None:
             random.seed(random_seed)
         print(f"Инициализирована стратегия S1 (случайные чанки)")
-        print(f"  • Random seed: {random_seed if random_seed else 'не задан'}")
+        print(f"  Random seed: {random_seed if random_seed else 'не задан'}")
     
     def get_chunk_range(self, json_path: str) -> Tuple[int, int]:
         """
@@ -58,11 +58,11 @@ class StrategyRandomChunks:
         """
         try:
             max_chunks, min_chunks = get_chunk_range(json_path, verbose=False)
-            print(f"  • Диапазон от chunk_range_calculator: MIN={min_chunks}, MAX={max_chunks}")
+            print(f"  Диапазон от chunk_range_calculator: MIN={min_chunks}, MAX={max_chunks}")
             return max_chunks, min_chunks
         except Exception as e:
-            print(f"  • Ошибка получения диапазона: {e}")
-            print(f"  • Использую значения по умолчанию: MIN=3, MAX=8")
+            print(f"  Ошибка получения диапазона: {e}")
+            print(f"  Использую значения по умолчанию: MIN=3, MAX=8")
             return 8, 3
     
     def select_random_chunks(self, chunks: List[Dict], min_chunks: int, max_chunks: int) -> Tuple[List[Dict], int, List[int]]:
@@ -154,57 +154,41 @@ class StrategyRandomChunks:
             "medium": "Средние вопросы на применение формул и понимание связей между концепциями",
             "hard": "Сложные вопросы на анализ, синтез и решение нетривиальных задач"
         }
-        
+                          
         prompt = f"""Ты — эксперт по генерации учебных тестов для студентов магистратуры по точным наукам.
 
 ПАРАМЕТРЫ ТЕСТА:
 - Количество вопросов: {num_questions}
 - Сложность: {difficulty} - {difficulty_map.get(difficulty, difficulty_map['medium'])}
 - Типы вопросов: {types_instruction}
-
-ИСХОДНЫЙ МАТЕРИАЛ (случайно выбранные фрагменты лекции):
+ИСХОДНЫЙ МАТЕРИАЛ (случайно выбранные фрагменты):
 {context}
 
 ТРЕБОВАНИЯ К ТЕСТУ:
-1. Все вопросы должны быть строго по содержанию предоставленного материала
-2. Не придумывай факты, которых нет в тексте
-3. Вопросы должны проверять понимание ключевых концепций и формул
-4. Используй математические обозначения и формулы там, где это уместно
-5. Для закрытых вопросов создай 4 варианта, один правильный
-6. Для открытых вопросов ожидай развернутый ответ
+1. Все вопросы должны быть строго по содержанию материала
+2. Каждый вопрос должен иметь 4 варианта ответа
+3. Только один вариант ответа правильный
+4. Вопросы должны проверять понимание ключевых концепций
+5. Избегай тривиальных и очевидных вопросов
+6. Включи вопросы разной сложности
 
-ФОРМАТ ОТВЕТА (ТОЛЬКО JSON, без пояснений). Пример:
+ФОРМАТ ОТВЕТА (ТОЛЬКО JSON, без пояснений):
 {{
-    "test_title": "Название теста (по теме материала)",
-    "subject": "Предмет/тема",
-    "difficulty": "{difficulty}",
-    "num_questions": {num_questions},
+    "test_title": "Название теста по теме материала",
+    "subject": "Определенная тема",
+    "difficulty": "medium",
     "questions": [
         {{
             "id": 1,
             "question": "Текст вопроса",
-            "type": "closed",
             "options": ["Вариант А", "Вариант Б", "Вариант В", "Вариант Г"],
             "correct_answer": "Вариант А",
-            "explanation": "Краткое пояснение"
-        }},
-        {{
-            "id": 2,
-            "question": "Текст открытого вопроса",
-            "type": "open",
-            "expected_answer": "Ожидаемый ответ или ключевые моменты",
-            "explanation": "Пояснение"
+            "explanation": "Краткое пояснение правильного ответа"
         }}
     ]
-}
+}}
 
-ВАЖНО: Верни ТОЛЬКО JSON, без дополнительного текста перед или после.""".format(
-        num_questions=num_questions,
-        difficulty=difficulty,
-        difficulty_desc=difficulty_map.get(difficulty, difficulty_map['medium']),
-        types_instruction=types_instruction,
-        context=context
-    )
+ВАЖНО: Верни ТОЛЬКО JSON, без дополнительного текста."""
     
     return prompt
     
@@ -236,7 +220,7 @@ class StrategyRandomChunks:
         
         # 1. Загружаем JSON
         if verbose:
-            print(f"\n📂 Загрузка: {json_path}")
+            print(f"\n Загрузка: {json_path}")
         
         with open(json_path, 'r', encoding='utf-8') as f:
             pipeline_data = json.load(f)
@@ -247,7 +231,7 @@ class StrategyRandomChunks:
         
         total_chunks = len(chunks)
         if verbose:
-            print(f"  • Всего чанков: {total_chunks}")
+            print(f" Всего чанков: {total_chunks}")
         
         # 2. Получаем диапазон
         max_chunks, min_chunks = self.get_chunk_range(json_path)
@@ -262,8 +246,8 @@ class StrategyRandomChunks:
         formulas = self.get_formulas_from_chunks(selected_chunks)
         
         if verbose:
-            print(f"\n📝 Извлечено текста: {len(texts)} блоков")
-            print(f"🧮 Формул в выбранных чанках: {len(formulas)}")
+            print(f"\n Извлечено текста: {len(texts)} блоков")
+            print(f" Формул в выбранных чанках: {len(formulas)}")
         
         # 5. Получаем метаданные
         metadata = {
@@ -292,7 +276,7 @@ class StrategyRandomChunks:
         prompt = self.create_prompt(texts, num_questions, difficulty, question_types)
         
         if verbose:
-            print(f"\n🚀 Отправка в GigaChat")
+            print(f"\n Отправка в GigaChat")
             print(f"  • Вопросов: {num_questions}")
             print(f"  • Сложность: {difficulty}")
             print(f"  • Типы: {question_types}")
@@ -350,7 +334,7 @@ class StrategyRandomChunks:
             return test_result
             
         except Exception as e:
-            print(f"❌ Ошибка: {e}")
+            print(f" Ошибка: {e}")
             return {"error": str(e), "strategy_metadata": metadata}
     
     def save_result(self, result: Dict[str, Any], strategy_name: str = "S1_random") -> str:
@@ -380,7 +364,7 @@ async def main():
     
     # Проверяем существование
     if not Path(json_file).exists():
-        print(f"❌ Файл не найден: {json_file}")
+        print(f" Файл не найден: {json_file}")
         
         # Ищем в текущей папке
         current_dir = Path(__file__).parent
@@ -390,7 +374,7 @@ async def main():
             for f in possible_files:
                 print(f"  • {f}")
             json_file = str(possible_files[0])
-            print(f"\n📁 Использую: {json_file}")
+            print(f"\n Использую: {json_file}")
         else:
             return
     
@@ -420,24 +404,24 @@ async def main():
     print("="*60)
     
     if 'error' in result:
-        print(f"❌ Ошибка: {result['error']}")
+        print(f"Ошибка: {result['error']}")
     else:
-        print(f"📚 Название: {result.get('test_title', 'Не указано')}")
-        print(f"📖 Предмет: {result.get('subject', 'Не указан')}")
-        print(f"⭐ Сложность: {result.get('difficulty', 'Не указана')}")
-        print(f"❓ Вопросов: {len(result.get('questions', []))}")
+        print(f"Название: {result.get('test_title', 'Не указано')}")
+        print(f"Предмет: {result.get('subject', 'Не указан')}")
+        print(f"Сложность: {result.get('difficulty', 'Не указана')}")
+        print(f"Вопросов: {len(result.get('questions', []))}")
         
         # Статистика по чанкам
         meta = result.get('strategy_metadata', {})
-        print(f"\n📊 Статистика стратегии:")
-        print(f"  • Использовано чанков: {meta.get('chunks_used', '?')} из {meta.get('total_chunks_original', '?')}")
-        print(f"  • Формул в чанках: {meta.get('total_formulas_in_chunks', '?')}")
-        print(f"  • Диапазон: [{meta.get('strategy_params', {}).get('min_chunks', '?')}, {meta.get('strategy_params', {}).get('max_chunks', '?')}]")
+        print(f"\nСтатистика стратегии:")
+        print(f" Использовано чанков: {meta.get('chunks_used', '?')} из {meta.get('total_chunks_original', '?')}")
+        print(f" Формул в чанках: {meta.get('total_formulas_in_chunks', '?')}")
+        print(f" Диапазон: [{meta.get('strategy_params', {}).get('min_chunks', '?')}, {meta.get('strategy_params', {}).get('max_chunks', '?')}]")
         
         # Показываем первый вопрос
         questions = result.get('questions', [])
         if questions:
-            print(f"\n📝 Пример вопроса:")
+            print(f"\n Пример вопроса:")
             q = questions[0]
             print(f"  {q.get('question', '')[:150]}...")
             if q.get('type') == 'closed':
