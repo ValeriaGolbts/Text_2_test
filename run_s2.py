@@ -459,17 +459,33 @@ class PipelineJSONProcessor:
             }
     
     def save_result(self, result: Dict[str, Any], output_path: str = None):
-        """Сохраняет результат в JSON файл"""
-        if not output_path:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = f"test_result_{timestamp}.json"
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
-        
-        print(f"\n💾 Сохранено: {output_path}")
-        return output_path
-
+    """Сохраняет результат в JSON файл"""
+    if not output_path:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = f"test_result_{timestamp}.json"
+    
+    # Если есть сырой ответ - сохраняем и его
+    if "raw_response" in result:
+        raw_path = output_path.replace('.json', '_raw.txt')
+        with open(raw_path, 'w', encoding='utf-8') as f:
+            f.write(result["raw_response"])
+        print(f"💾 Сырой ответ сохранён: {raw_path}")
+    
+    # Сохраняем JSON (конвертируем сложные объекты в строки)
+    try:
+        serializable_result = json.loads(
+            json.dumps(result, ensure_ascii=False, default=str)
+        )
+    except:
+        # Если не получается сериализовать - сохраняем как есть
+        serializable_result = result
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(serializable_result, f, ensure_ascii=False, indent=2)
+    
+    print(f"💾 Результат сохранён: {output_path}")
+    return output_path
+    
 
 async def main():
     """Основная функция"""
