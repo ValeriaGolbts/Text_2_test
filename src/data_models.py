@@ -12,7 +12,6 @@ from enum import Enum
 class BlockType(str, Enum):
     """Тип текстового блока."""
     TEXT = "text"
-    CODE = "code"
     FORMULA = "formula"      
     MIXED = "mixed"           # если в блоке смесь
 
@@ -104,6 +103,9 @@ class ProcessingStats:
     
     input_file_size_bytes: int = 0
     """Размер исходного файла в байтах."""
+
+    file_extension: str = ""  
+    """Расширение файла"""
     
     def to_dict(self) -> Dict[str, Any]:
         """Преобразует статистику в словарь."""
@@ -111,7 +113,8 @@ class ProcessingStats:
             "total_chunks": self.total_chunks,
             "total_formulas": self.total_formulas,
             "processing_time_seconds": round(self.processing_time_seconds, 3),
-            "input_file_size_bytes": self.input_file_size_bytes
+            "input_file_size_bytes": self.input_file_size_bytes,
+            "file_extension": self.file_extension
         }
 
 

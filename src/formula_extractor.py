@@ -70,9 +70,6 @@ class FormulaExtractor:
     
     def _compile_patterns(self):
         """Компилирует регулярные выражения для поиска формул."""
-        
-        # LaTeX inline формулы: $...$ (но не \$ как символ доллара)
-        # Используем negative lookbehind чтобы не находить escaped доллары
         self.latex_inline_pattern = re.compile(
             r'(?<!\\)\$(?!\$)(.*?)(?<!\\)\$(?!\$)',
             re.DOTALL
@@ -144,7 +141,7 @@ class FormulaExtractor:
             all_formulas.extend(formulas)
             detection_stats["latex_inline"] = len(formulas)
         
-        # Шаг 3: Ищем plain-text формулы (если включено)
+        # Шаг 3: Ищем plain-text формулы 
         if self.detect_plain_text and methods in [DetectionMethod.PLAIN_TEXT, DetectionMethod.ALL]:
             formulas, current_text = self._extract_plain_text(current_text, text, placeholder_map)
             all_formulas.extend(formulas)

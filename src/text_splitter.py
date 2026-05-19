@@ -577,7 +577,7 @@ class SemanticEmbeddingSplitter(TextSplitter):
 
 
 def split_text(text: str, 
-               splitter_type: SplitterType = SplitterType.PARAGRAPH,
+               splitter_type: SplitterType = SplitterType.MIXED,
                **kwargs) -> List[TextChunkInfo]:
     """
     Функция для разбиения текста.

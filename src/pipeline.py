@@ -22,7 +22,6 @@ from src.text_splitter import split_text, SplitterType, TextChunkInfo
 from src.metadata_extractor import extract_metadata
 from src.text_cleaner import LectureTextCleaner
 from src.file_loader import FileLoaderFactory, AudioLoader, VideoLoader, load_file
-
 from src.data_models import BlockType
 
 logger = logging.getLogger(__name__)
@@ -33,7 +32,7 @@ class LectureProcessingPipeline:
     
     def __init__(self, 
                  detect_plain_text_formulas: bool = True,
-                 splitter_type: SplitterType = SplitterType.SEMANTIC_EMBEDDING,
+                 splitter_type: SplitterType = SplitterType.MIXED,
                  min_chunk_size: int = 100,
                  max_chunk_size: int = 50000,
                  preserve_original_text: bool = True,
@@ -109,7 +108,7 @@ class LectureProcessingPipeline:
                 normalized_content = self.text_cleaner.clean(normalized_content)
 
 
-            # Шаг 3.2: Поиск и обработка формул (только для текстовых файлов, не для аудио/видео)
+            # Шаг 3.1: Поиск и обработка формул (только для текстовых файлов, не для аудио/видео)
             if ext in ('.mp3', '.mp4'):
                 logger.info("Для аудио/видео поиск формул пропускаем")
                 # Создаём пустой результат: текст без изменений, список формул пуст
@@ -120,12 +119,19 @@ class LectureProcessingPipeline:
                     detection_stats={"skipped": True}
                 )
             else:
-                logger.debug("Шаг 3.2: Поиск формул")
+                logger.debug("Шаг 3.1: Поиск формул")
                 formula_result = self._extract_formulas(normalized_content)
             
-            # Шаг 4: Разбиение на блоки (текст уже с плейсхолдерами и формул, и кода)
+            # Шаг 4: Разбиение на блоки
             logger.debug("Шаг 4: Разбиение на блоки")
-            chunks_info = self._split_text(formula_result.text_with_placeholders)
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext in ('.mp3', '.mp4'):
+                # Для аудио/видео используем семантический эмбеддинг-сплиттер
+                active_splitter = SplitterType.SEMANTIC_EMBEDDING
+            else:
+                # Для текстовых файлов используем MIXED
+                active_splitter = self.splitter_type  
+            chunks_info = self._split_text(formula_result.text_with_placeholders, splitter_type=active_splitter)
             
             # Шаг 5: Создание текстовых блоков с метаданными
             logger.debug("Шаг 5: Создание блоков с метаданными")
@@ -192,18 +198,17 @@ class LectureProcessingPipeline:
                     f"plain: {result.detection_stats.get('plain_text', 0)})")
         
         return result
-    
-    def _split_text(self, text_with_placeholders: str) -> List[TextChunkInfo]:
-        """Разбивает текст на блоки."""
+
+    def _split_text(self, text: str, splitter_type: SplitterType = None) -> List[TextChunkInfo]:
+        """Разбивает текст на блоки с возможностью временно переопределить тип сплиттера."""
+        if splitter_type is None:
+            splitter_type = self.splitter_type
         chunks = split_text(
-            text_with_placeholders,
-            splitter_type=self.splitter_type,
+            text,
+            splitter_type=splitter_type,
             min_chunk_size=self.min_chunk_size,
             max_chunk_size=self.max_chunk_size
         )
-        
-        logger.debug(f"Текст разбит на {len(chunks)} блоков")
-        
         return chunks
     
     def _create_text_chunks(self, 
@@ -263,12 +268,14 @@ class LectureProcessingPipeline:
                            start_time: float) -> ProcessingStats:
         """Собирает статистику обработки."""
         processing_time = time.time() - start_time
-        
+        file_extension = os.path.splitext(file_path)[1].lower()
+
         stats = ProcessingStats(
             total_chunks=chunks_count,
             total_formulas=len(formula_result.formulas),
             processing_time_seconds=processing_time,
-            input_file_size_bytes=file_metadata.get('file_size', 0)
+            input_file_size_bytes=file_metadata.get('file_size', 0),
+            file_extension=file_extension
         )
         
         # Добавляем дополнительную статистику

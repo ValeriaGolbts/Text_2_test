@@ -26,7 +26,6 @@ import json
 import wave
 import tempfile
 import subprocess
-from vosk import Model, KaldiRecognizer
 import numpy as np
 
 import shutil
@@ -222,9 +221,9 @@ class PdfLoader(FileLoader):
             # Отключаем обработку изображений и OCR
             md_text = pymupdf4llm.to_markdown(
                 file_path,
-                ignore_images=False,#True,      # игнорировать растровые изображения
+                ignore_images=False,
                 ignore_graphics=True,    # игнорировать векторную графику
-                use_ocr=True,#False,           # не использовать OCR
+                use_ocr=True,
                 force_text=True,
                 write_images=False,      # не сохранять изображения в файлы
                 embed_images=False       # не встраивать изображения в Markdown
@@ -268,9 +267,6 @@ class DocxLoader(FileLoader):
         self._validate_file(file_path)
 
         try:
-            # Конвертация DOCX -> Markdown.
-            # Аргумент '--wrap=none' отключает принудительный перенос строк,
-            # чтобы текст оставался цельным.
             md_text = pypandoc.convert_file(
                 file_path,
                 'markdown',
@@ -298,53 +294,7 @@ class DocxLoader(FileLoader):
     def get_metadata(self) -> Dict[str, Any]:
         return self._metadata.copy()
         
-# class DocxLoader(FileLoader):
-#     """Загрузчик для DOCX файлов."""
     
-#     def __init__(self):
-#         self._metadata = {}
-#         if Document is None:
-#             raise ImportError("Для работы с DOCX требуется python-docx. Установите: pip install python-docx")
-    
-#     def load(self, file_path: str) -> str:
-#         self._validate_file(file_path)
-        
-#         try:
-#             doc = Document(file_path)
-#             paragraphs = []
-#             for para in doc.paragraphs:
-#                 if para.text.strip():
-#                     paragraphs.append(para.text)
-            
-#             # Также можно извлечь текст из таблиц, если нужно
-#             for table in doc.tables:
-#                 for row in table.rows:
-#                     for cell in row.cells:
-#                         cell_text = cell.text.strip()
-#                         if cell_text:
-#                             paragraphs.append(cell_text)
-            
-#             full_text = "\n\n".join(paragraphs)
-            
-#             self._metadata = {
-#                 "file_type": "docx",
-#                 "file_size": os.path.getsize(file_path),
-#                 "paragraph_count": len(paragraphs),
-#                 "character_count": len(full_text)
-#             }
-            
-#             logger.info(f"Загружен DOCX файл: {file_path}, параграфов: {len(paragraphs)}")
-#             return full_text
-            
-#         except Exception as e:
-#             logger.error(f"Ошибка при чтении DOCX {file_path}: {e}")
-#             raise ValueError(f"Не удалось прочитать DOCX файл {file_path}: {str(e)}")
-    
-#     def get_metadata(self) -> dict:
-#         return self._metadata.copy()
-    
-
-
 def transcribe_audio_whisper(audio_path: str, model_size: str = "small", device: str = "cpu", compute_type: str = "int8") -> str:
     """
     Транскрибирует аудиофайл (mp3, wav) с помощью faster-whisper.
