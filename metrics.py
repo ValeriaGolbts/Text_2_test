@@ -57,7 +57,7 @@ class ContentMetricsCalculator:
             with open(self.chunks_path, 'r', encoding='utf-8') as f:
                 self.chunks_data = json.load(f)
             self.all_chunks = self.chunks_data.get('chunks', [])
-            print(f"✅ Загружены чанки: {len(self.all_chunks)} блоков")
+            print(f" Загружены чанки: {len(self.all_chunks)} блоков")
             
             # Загрузка теста
             with open(self.test_path, 'r', encoding='utf-8') as f:
@@ -78,14 +78,14 @@ class ContentMetricsCalculator:
             else:
                 self.questions = []
             
-            print(f"✅ Загружен тест: {len(self.questions)} вопросов")
+            print(f" Загружен тест: {len(self.questions)} вопросов")
             return True
             
         except FileNotFoundError as e:
-            print(f"❌ Файл не найден: {e}")
+            print(f" Файл не найден: {e}")
             return False
         except json.JSONDecodeError as e:
-            print(f"❌ Ошибка парсинга JSON: {e}")
+            print(f" Ошибка парсинга JSON: {e}")
             return False
     
     def extract_all_formulas(self) -> Set[str]:
@@ -117,7 +117,7 @@ class ContentMetricsCalculator:
             for ph in placeholders:
                 formulas.add(ph)
         
-        print(f"📐 Всего уникальных формул в чанках: {len(formulas)}")
+        print(f" Всего уникальных формул в чанках: {len(formulas)}")
         return formulas
     
     def extract_all_terms(self) -> Set[str]:
@@ -131,7 +131,7 @@ class ContentMetricsCalculator:
             chunk_terms = metadata.get('key_terms', [])
             terms.update(chunk_terms)
         
-        print(f"🔑 Всего уникальных терминов в чанках: {len(terms)}")
+        print(f" Всего уникальных терминов в чанках: {len(terms)}")
         return terms
     
     def _normalize_formula(self, formula: str) -> str:
@@ -176,7 +176,7 @@ class ContentMetricsCalculator:
             for me in math_expr:
                 formulas.add(self._normalize_formula(me))
         
-        print(f"📐 Формул в тесте: {len(formulas)}")
+        print(f" Формул в тесте: {len(formulas)}")
         return formulas
     
     def extract_terms_from_test(self) -> Set[str]:
@@ -202,7 +202,7 @@ class ContentMetricsCalculator:
                 if term in all_text:
                     terms.add(term)
         
-        print(f"🔑 Терминов в тесте: {len(terms)}")
+        print(f" Терминов в тесте: {len(terms)}")
         return terms
     
     def calculate_term_coverage(self) -> float:
@@ -217,7 +217,7 @@ class ContentMetricsCalculator:
             return 0.0
         
         coverage = len(terms_in_test) / len(all_terms)
-        print(f"📊 Покрытие терминов: {coverage:.2%} ({len(terms_in_test)}/{len(all_terms)})")
+        print(f" Покрытие терминов: {coverage:.2%} ({len(terms_in_test)}/{len(all_terms)})")
         return coverage
     
     def calculate_formula_coverage(self) -> float:
@@ -232,7 +232,7 @@ class ContentMetricsCalculator:
             return 0.0
         
         coverage = len(formulas_in_test) / len(all_formulas)
-        print(f"📊 Покрытие формул: {coverage:.2%} ({len(formulas_in_test)}/{len(all_formulas)})")
+        print(f" Покрытие формул: {coverage:.2%} ({len(formulas_in_test)}/{len(all_formulas)})")
         return coverage
     
     def calculate_self_bleu(self) -> float:
@@ -282,7 +282,7 @@ class ContentMetricsCalculator:
             return 0.5
         
         self_bleu = sum(bleu_scores) / len(bleu_scores)
-        print(f"📊 Self-BLEU: {self_bleu:.3f} (чем ниже, тем разнообразнее)")
+        print(f" Self-BLEU: {self_bleu:.3f} (чем ниже, тем разнообразнее)")
         return self_bleu
     
     def calculate_avg_question_length(self) -> float:
@@ -292,7 +292,7 @@ class ContentMetricsCalculator:
         
         lengths = [len(q.get('question', '')) for q in self.questions]
         avg_length = sum(lengths) / len(lengths)
-        print(f"📊 Средняя длина вопроса: {avg_length:.0f} символов")
+        print(f" Средняя длина вопроса: {avg_length:.0f} символов")
         return avg_length
     
     def calculate_formula_density_in_test(self) -> float:
@@ -309,7 +309,7 @@ class ContentMetricsCalculator:
                 questions_with_formulas += 1
         
         density = questions_with_formulas / len(self.questions)
-        print(f"📊 Доля вопросов с формулами: {density:.2%}")
+        print(f" Доля вопросов с формулами: {density:.2%}")
         return density
     
     def calculate_question_types_distribution(self) -> Dict[str, int]:
@@ -355,16 +355,15 @@ class ContentMetricsCalculator:
         total_terms = len(all_terms_found)
         uniqueness = unique_terms / total_terms
         
-        print(f"📊 Уникальность терминов: {uniqueness:.2%}")
+        print(f" Уникальность терминов: {uniqueness:.2%}")
         return uniqueness
     
     def calculate_all_metrics(self) -> Dict[str, Any]:
         """
         Рассчитывает все метрики и возвращает словарь с результатами.
         """
-        print("\n" + "=" * 60)
+        
         print("РАСЧЕТ СОДЕРЖАТЕЛЬНЫХ МЕТРИК")
-        print("=" * 60)
         
         if not self.load_data():
             return {"error": "Не удалось загрузить данные"}
@@ -395,14 +394,13 @@ class ContentMetricsCalculator:
             metrics["formula_density_in_test"] * 0.2
         )
         
-        print("\n" + "=" * 60)
+      
         print("ИТОГОВЫЕ МЕТРИКИ")
-        print("=" * 60)
-        print(f"🎯 Quality Score: {metrics['quality_score']:.3f}")
-        print(f"   • Покрытие терминов: {metrics['term_coverage']:.2%}")
-        print(f"   • Покрытие формул: {metrics['formula_coverage']:.2%}")
-        print(f"   • Diversity Score: {metrics['diversity_score']:.3f}")
-        print(f"   • Формулы в вопросах: {metrics['formula_density_in_test']:.2%}")
+        print(f" Quality Score: {metrics['quality_score']:.3f}")
+        print(f"    Покрытие терминов: {metrics['term_coverage']:.2%}")
+        print(f"    Покрытие формул: {metrics['formula_coverage']:.2%}")
+        print(f"    Diversity Score: {metrics['diversity_score']:.3f}")
+        print(f"    Формулы в вопросах: {metrics['formula_density_in_test']:.2%}")
         
         return metrics
     
@@ -416,14 +414,12 @@ class ContentMetricsCalculator:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(metrics, f, ensure_ascii=False, indent=2)
         
-        print(f"\n💾 Метрики сохранены в: {output_path}")
+        print(f"\n Метрики сохранены в: {output_path}")
         return output_path
     
     def print_comparison_table(self):
         """Выводит таблицу для сравнения с другими стратегиями"""
-        print("\n" + "=" * 60)
         print("ТАБЛИЦА ДЛЯ СРАВНЕНИЯ СТРАТЕГИЙ")
-        print("=" * 60)
         print(f"{'Метрика':<30} | {'Значение':<15}")
         print("-" * 50)
         print(f"{'Покрытие терминов':<30} | {self.calculate_term_coverage():.2%}")
@@ -433,7 +429,7 @@ class ContentMetricsCalculator:
         print(f"{'Средняя длина вопроса':<30} | {self.calculate_avg_question_length():.0f}")
         print(f"{'Доля вопросов с формулами':<30} | {self.calculate_formula_density_in_test():.2%}")
         print(f"{'Уникальность терминов':<30} | {self.calculate_term_uniqueness():.2%}")
-        print("=" * 60)
+
 
 
 def main():
@@ -450,8 +446,8 @@ def main():
     if len(sys.argv) > 2:
         test_file = sys.argv[2]
     
-    print(f"📂 Файл с чанками: {chunks_file}")
-    print(f"📂 Файл с тестом: {test_file}")
+    print(f" Файл с чанками: {chunks_file}")
+    print(f" Файл с тестом: {test_file}")
     
     # Расчет метрик
     calculator = ContentMetricsCalculator(chunks_file, test_file)
