@@ -409,4 +409,4 @@ if __name__ == "__main__":
     results = analyze_test(test_file, save_results=save)
     
     # Выводим итоговую оценку
-    print(f"\n🎯 ИТОГОВАЯ ОЦЕНКА ТЕСТА: {results['grade']} (Quality Score: {results['overall_quality_score']:.2%})")
+    print(f"\n ИТОГОВАЯ ОЦЕНКА ТЕСТА: {results['grade']} (Quality Score: {results['overall_quality_score']:.2%})")
