@@ -23,8 +23,7 @@ async def main():
     
     # Список тестов для оценки (замените на ваши файлы)
     test_files = [
-        "audio_4.json",
-        "audio_3.json",
+        "audio_1.json",
         "audio_2.json",
     ]
     
