@@ -53,16 +53,16 @@ class PipelineJSONProcessor:
     
     def __init__(self):
         self.client = GigaChatB2BClient()
-        print(f"✅ Инициализирован B2B клиент")
+        print(f" Инициализирован B2B клиент")
     
     def load_pipeline_json(self, json_path: str) -> Dict[str, Any]:
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            print(f"📁 Загружен JSON: {json_path}")
+            print(f" Загружен JSON: {json_path}")
             return data
         except Exception as e:
-            print(f"❌ Ошибка загрузки JSON: {e}")
+            print(f" Ошибка загрузки JSON: {e}")
             return {}
     
     def _calculate_placeholder_ratio(self, text: str) -> float:
@@ -164,9 +164,9 @@ class PipelineJSONProcessor:
             else:
                 no_topic_chunks.append(item)
         
-        print(f"\n🔍 АНАЛИЗ ТЕМ:")
-        print(f"  • Найдено тем: {len(topic_groups)}")
-        print(f"  • Чанков без темы: {len(no_topic_chunks)}")
+        print(f"\n АНАЛИЗ ТЕМ:")
+        print(f"  Найдено тем: {len(topic_groups)}")
+        print(f"  Чанков без темы: {len(no_topic_chunks)}")
         
         # Считаем метрики для каждой темы
         topic_stats = []
@@ -205,7 +205,7 @@ class PipelineJSONProcessor:
         # Выбираем top-N тем
         main_topics = topic_stats[:num_topics]
         
-        print(f"\n📊 ТОП-{num_topics} ГЛАВНЫХ ТЕМ:")
+        print(f"\n ТОП-{num_topics} Главных тем:")
         for i, stat in enumerate(main_topics, 1):
             print(f"  {i}. «{stat['topic']}»")
             print(f"     Чанков: {stat['chunk_count']} | "
@@ -221,7 +221,7 @@ class PipelineJSONProcessor:
             for stat in other_topics[:5]:
                 print(f"    - «{stat['topic']}»: {stat['chunk_count']} чанков")
             if len(other_topics) > 5:
-                print(f"    ... и ещё {len(other_topics) - 5} тем")
+                print(f" и ещё {len(other_topics) - 5} тем")
         
         # Чанки без темы добавляем к последней теме или создаём группу "общее"
         if no_topic_chunks:
@@ -271,7 +271,7 @@ class PipelineJSONProcessor:
             return [], {"error": "Нет чанков для отбора"}
         
         print(f"\n{'='*60}")
-        print(f"🧩 ОТБОР ЧАНКОВ: КЛАСТЕРИЗАЦИЯ ПО ТЕМАМ")
+        print(f" ОТБОР ЧАНКОВ: КЛАСТЕРИЗАЦИЯ ПО ТЕМАМ")
         print(f"{'='*60}")
         
         # === ШАГ 1: Подготовка чанков ===
@@ -298,21 +298,21 @@ class PipelineJSONProcessor:
             else:
                 rejected_stats[reason] = rejected_stats.get(reason, 0) + 1
         
-        print(f"  • Прошло фильтрацию: {len(prepared)} чанков")
-        print(f"  • Отклонено: {len(chunks) - len(prepared)} чанков")
+        print(f"  Прошло фильтрацию: {len(prepared)} чанков")
+        print(f"  Отклонено: {len(chunks) - len(prepared)} чанков")
         
         if not prepared:
             return [], {"error": "Все чанки отклонены"}
         
         # === ШАГ 2: Определение главных тем ===
-        print(f"\n📊 ШАГ 2: Определение главных тем...")
+        print(f"\n  ШАГ 2: Определение главных тем.")
         main_topics = self._extract_main_topics(prepared, num_topics)
         
         if not main_topics:
             return [], {"error": "Не удалось определить темы"}
         
         # === ШАГ 3: Расчёт лимита токенов ===
-        print(f"\n📐 ШАГ 3: Расчёт лимитов...")
+        print(f"\n ШАГ 3: Расчёт лимитов.")
         
         MAX_CONTEXT = MODEL_CONFIG["context_window"]
         RESPONSE_RESERVE = MODEL_CONFIG["max_output_tokens"]
@@ -329,7 +329,7 @@ class PipelineJSONProcessor:
         print(f"  • Целевой лимит ({fill_pct}%): {target_tokens:,}")
         
         # === ШАГ 4: Распределение токенов между темами ===
-        print(f"\n💰 ШАГ 4: Распределение токенов между темами...")
+        print(f"\n ШАГ 4: Распределение токенов между темами.")
         
         # Считаем общую важность
         total_importance = sum(stat['importance'] for stat in main_topics)
@@ -346,7 +346,7 @@ class PipelineJSONProcessor:
                   f"({stat['importance']/total_importance*100:.0f}%)")
         
         # === ШАГ 5: Отбор чанков внутри каждой темы ===
-        print(f"\n🐌 ШАГ 5: Ползучее накопление внутри тем...")
+        print(f"\n ШАГ 5: Ползучее накопление внутри тем.")
         
         all_selected = []
         total_formulas = sum(
@@ -365,7 +365,7 @@ class PipelineJSONProcessor:
             topic_selected = []
             topic_tokens = 0
             
-            print(f"\n  📌 Тема «{stat['topic']}» (бюджет: {stat['token_budget']:,} ток):")
+            print(f"\n Тема «{stat['topic']}» (бюджет: {stat['token_budget']:,} ток):")
             
             for i, item in enumerate(stat['items'], 1):
                 if topic_tokens + item['tokens'] > stat['token_budget']:
@@ -392,7 +392,7 @@ class PipelineJSONProcessor:
             all_selected.extend([item['chunk'] for item in topic_selected])
             total_selected_tokens += topic_tokens
             
-            print(f"    ✅ Отобрано: {len(topic_selected)} чанков, "
+            print(f"  Отобрано: {len(topic_selected)} чанков, "
                   f"{topic_tokens:,} токенов")
         
         # === ШАГ 6: Статистика ===
@@ -429,18 +429,17 @@ class PipelineJSONProcessor:
             ]
         }
         
-        print(f"\n{'='*60}")
-        print(f"📊 РЕЗУЛЬТАТ КЛАСТЕРИЗАЦИИ")
-        print(f"{'='*60}")
-        print(f"  • Выбрано тем: {len(main_topics)}")
+     
+        print(f" РЕЗУЛЬТАТ КЛАСТЕРИЗАЦИИ")
+        print(f"  Выбрано тем: {len(main_topics)}")
         for detail in selection_info['topic_details']:
             print(f"    - «{detail['topic']}»: {detail['chunks_selected']} чанков, "
                   f"важность {detail['importance']:.0f}")
-        print(f"  • Всего чанков: {len(all_selected)}")
-        print(f"  • Заполнение: {total_selected_tokens:,} из {available_tokens:,} "
+        print(f"  Всего чанков: {len(all_selected)}")
+        print(f"  Заполнение: {total_selected_tokens:,} из {available_tokens:,} "
               f"({selection_info['fill_percentage']}%)")
-        print(f"  • Покрытие формул: {formulas_pct:.1f}%")
-        print(f"  • Покрытие терминов: {terms_pct:.1f}%")
+        print(f"  Покрытие формул: {formulas_pct:.1f}%")
+        print(f"  Покрытие терминов: {terms_pct:.1f}%")
         
         return all_selected, selection_info
     
@@ -450,7 +449,7 @@ class PipelineJSONProcessor:
             text = chunk.get('processed_text', '')
             if text:
                 texts.append(text)
-        print(f"\n📝 Извлечено {len(texts)} текстовых блоков")
+        print(f"\n Извлечено {len(texts)} текстовых блоков")
         return texts
     
     def get_metadata(self, pipeline_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -517,7 +516,7 @@ class PipelineJSONProcessor:
         """Основной метод обработки с кластеризацией по темам"""
         
         print("=" * 70)
-        print(f"🧩 ОБРАБОТКА JSON: КЛАСТЕРИЗАЦИЯ ПО {num_topics} ТЕМАМ")
+        print(f" ОБРАБОТКА JSON: Кластерилизация по {num_topics} темам")
         print("=" * 70)
         
         pipeline_data = self.load_pipeline_json(json_path)
@@ -537,19 +536,19 @@ class PipelineJSONProcessor:
             return {"error": "Нет текстов для обработки"}
         
         metadata = self.get_metadata(pipeline_data)
-        print(f"\n📋 Метаданные:")
-        print(f"  • Файл: {metadata['source_file']}")
-        print(f"  • Чанков в файле: {metadata['total_chunks']}")
-        print(f"  • Отобрано: {len(selected_chunks)}")
+        print(f"\n Метаданные:")
+        print(f"  Файл: {metadata['source_file']}")
+        print(f"  Чанков в файле: {metadata['total_chunks']}")
+        print(f"  Отобрано: {len(selected_chunks)}")
         
         prompt = self.create_prompt(texts, num_questions, selection_info)
         
-        print(f"\n📤 ФИНАЛЬНАЯ ПРОВЕРКА:")
+        print(f"\n ФИНАЛЬНАЯ ПРОВЕРКА:")
         final_tokens = estimate_tokens_gigachat(prompt)
-        print(f"  • Размер промпта: {len(prompt):,} символов")
-        print(f"  • Токенов: {final_tokens:,}")
+        print(f"   Размер промпта: {len(prompt):,} символов")
+        print(f"   Токенов: {final_tokens:,}")
         
-        print(f"\n📤 Отправка в GigaChat...")
+        print(f"\n  Отправка в GigaChat.")
         messages = [{"role": "user", "content": prompt}]
         
         try:
@@ -559,7 +558,7 @@ class PipelineJSONProcessor:
                 temperature=0.7
             )
             
-            print(f"✅ Ответ получен")
+            print(f" Ответ получен")
             content = response['choices'][0]['message']['content']
             
             def clean_json_for_parsing(json_str: str) -> str:
@@ -593,12 +592,12 @@ class PipelineJSONProcessor:
             test_result = None
             try:
                 test_result = json.loads(json_str)
-                print("  ✅ JSON успешно распарсен")
+                print("   JSON успешно распарсен")
             except json.JSONDecodeError:
                 try:
                     cleaned = clean_json_for_parsing(json_str)
                     test_result = json.loads(cleaned)
-                    print("  ✅ JSON распарсен после очистки LaTeX")
+                    print(" JSON распарсен после очистки LaTeX")
                 except:
                     test_result = {"raw_response": content, "questions": []}
             
@@ -613,7 +612,7 @@ class PipelineJSONProcessor:
             return test_result
             
         except Exception as e:
-            print(f"❌ Ошибка: {e}")
+            print(f" Ошибка: {e}")
             return {
                 "error": str(e),
                 "pipeline_metadata": metadata,
@@ -629,7 +628,7 @@ class PipelineJSONProcessor:
             raw_path = output_path.replace('.json', '_raw.txt')
             with open(raw_path, 'w', encoding='utf-8') as f:
                 f.write(result["raw_response"])
-            print(f"💾 Сырой ответ сохранён: {raw_path}")
+            print(f" Сырой ответ сохранён: {raw_path}")
         
         try:
             serializable_result = json.loads(
@@ -641,7 +640,7 @@ class PipelineJSONProcessor:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(serializable_result, f, ensure_ascii=False, indent=2)
         
-        print(f"💾 Результат сохранён: {output_path}")
+        print(f" Результат сохранён: {output_path}")
         return output_path
 
 
@@ -649,7 +648,7 @@ async def main():
     json_file = r"C:\Users\валерия\Projects\Text_2_test\output.json"
     
     if not Path(json_file).exists():
-        print(f"❌ Файл не найден: {json_file}")
+        print(f" Файл не найден: {json_file}")
         return
     
     processor = PipelineJSONProcessor()
@@ -664,26 +663,15 @@ async def main():
     if 'error' not in result:
         output_file = processor.save_result(result)
         
-        print("\n" + "=" * 70)
-        print("📊 РЕЗУЛЬТАТ ГЕНЕРАЦИИ ТЕСТА")
-        print("=" * 70)
-        print(f"Название: {result.get('test_title', 'N/A')}")
-        print(f"Тема: {result.get('subject', 'N/A')}")
-        print(f"Вопросов: {len(result.get('questions', []))}")
         
+        print(" Результат генерации теста")
+                
         selection_info = result.get('selection_info', {})
         if selection_info:
-            print(f"\n📈 СТАТИСТИКА КЛАСТЕРИЗАЦИИ:")
-            print(f"  • Главные темы: {', '.join(selection_info.get('selected_topics', []))}")
-            print(f"  • Отобрано чанков: {selection_info['selected_count']}")
-            print(f"  • Заполнение: {selection_info.get('fill_percentage', 0)}%")
-        
-        if result.get('questions'):
-            q = result['questions'][0]
-            print(f"\n📝 ПРИМЕР ВОПРОСА:")
-            print(f"  {q.get('question', '')}")
-    else:
-        print(f"\n❌ Ошибка: {result['error']}")
+            print(f"\n СТАТИСТИКА КЛАСТЕРИЗАЦИИ:")
+            print(f"  Главные темы: {', '.join(selection_info.get('selected_topics', []))}")
+            print(f"  Отобрано чанков: {selection_info['selected_count']}")
+            print(f"  Заполнение: {selection_info.get('fill_percentage', 0)}%")
 
 
 if __name__ == "__main__":
