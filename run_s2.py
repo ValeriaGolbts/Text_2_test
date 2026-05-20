@@ -77,8 +77,8 @@ class PipelineJSONProcessor:
                 return None
                 
         except Exception as e:
-            print(f"  Ошибка при обращении к API: {e}")
-            return None"""
+            print(f"  Ошибка при обращении к API: {e}")"""
+            return None
     
     def load_pipeline_json(self, json_path: str) -> Dict[str, Any]:
         """Загружает JSON файл от pipeline"""
@@ -117,6 +117,7 @@ class PipelineJSONProcessor:
         
         # Пробуем точный подсчёт через API
         #token_counts = self.count_tokens_via_api(chunk_texts)
+        token_counts = None
         
         if token_counts is None or len(token_counts) != len(chunks):
             # Fallback: реалистичная оценка
