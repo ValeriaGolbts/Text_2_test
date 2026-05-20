@@ -208,10 +208,7 @@ class PipelineJSONProcessor:
         if not chunks:
             return [], {"error": "Нет чанков для отбора"}
         
-        print(f"\n{'='*60}")
         print(f" Отбор чанок: информативность")
-        print(f"{'='*60}")
-        
         # === ШАГ 1: Фильтрация некачественных чанков ===
         print(f"\n ШАГ 1: Фильтрация качества.")
         print(f"  Всего чанков: {len(chunks)}")
