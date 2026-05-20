@@ -270,13 +270,11 @@ class PipelineJSONProcessor:
         if not chunks:
             return [], {"error": "Нет чанков для отбора"}
         
-        print(f"\n{'='*60}")
-        print(f" ОТБОР ЧАНКОВ: КЛАСТЕРИЗАЦИЯ ПО ТЕМАМ")
-        print(f"{'='*60}")
         
-        # === ШАГ 1: Подготовка чанков ===
-        print(f"\n🔍 ШАГ 1: Подготовка и фильтрация чанков...")
-        print(f"  • Всего чанков: {len(chunks)}")
+        print(f" ОТБОР ЧАНКОВ: КЛАСТЕРИЗАЦИЯ ПО ТЕМАМ")
+        
+        print(f"\n ШАГ 1: Подготовка и фильтрация чанков...")
+        print(f"  Всего чанков: {len(chunks)}")
         
         prepared = []
         rejected_stats = {}
@@ -325,8 +323,8 @@ class PipelineJSONProcessor:
         
         target_tokens = int(available_tokens * fill_pct / 100)
         
-        print(f"  • Доступно токенов: {available_tokens:,}")
-        print(f"  • Целевой лимит ({fill_pct}%): {target_tokens:,}")
+        print(f"  Доступно токенов: {available_tokens:,}")
+        print(f"  Целевой лимит ({fill_pct}%): {target_tokens:,}")
         
         # === ШАГ 4: Распределение токенов между темами ===
         print(f"\n ШАГ 4: Распределение токенов между темами.")
@@ -515,10 +513,9 @@ class PipelineJSONProcessor:
                                     fill_pct: int = 90) -> Dict[str, Any]:
         """Основной метод обработки с кластеризацией по темам"""
         
-        print("=" * 70)
-        print(f" ОБРАБОТКА JSON: Кластерилизация по {num_topics} темам")
-        print("=" * 70)
         
+        print(f" ОБРАБОТКА JSON: Кластерилизация по {num_topics} темам")
+                
         pipeline_data = self.load_pipeline_json(json_path)
         if not pipeline_data:
             return {"error": "Не удалось загрузить JSON"}
