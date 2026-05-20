@@ -278,7 +278,7 @@ class PipelineJSONProcessor:
         
         if texts:
             preview = texts[0][:150].replace('\n', ' ')
-            print(f"   Пример: {preview}...")
+            #print(f"   Пример: {preview}...")
         
         return texts
     
