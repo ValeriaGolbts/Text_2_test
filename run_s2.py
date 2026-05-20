@@ -78,7 +78,7 @@ class PipelineJSONProcessor:
                 
         except Exception as e:
             print(f"  Ошибка при обращении к API: {e}")"""
-            return None
+        return None
     
     def load_pipeline_json(self, json_path: str) -> Dict[str, Any]:
         """Загружает JSON файл от pipeline"""
