@@ -42,7 +42,7 @@ class PipelineJSONProcessor:
         Точный подсчёт токенов через официальный эндпоинт GigaChat API.
         POST /api/v1/tokens/count
         """
-        try:
+        """try:
             url = f"{self.client.base_url}/tokens/count"
             
             payload = {
@@ -77,8 +77,8 @@ class PipelineJSONProcessor:
                 return None
                 
         except Exception as e:
-            print(f"  ⚠ Ошибка при обращении к API: {e}")
-            return None
+            print(f"  Ошибка при обращении к API: {e}")
+            return None"""
     
     def load_pipeline_json(self, json_path: str) -> Dict[str, Any]:
         """Загружает JSON файл от pipeline"""
@@ -116,7 +116,7 @@ class PipelineJSONProcessor:
         print(f"\n Подсчет токенов:")
         
         # Пробуем точный подсчёт через API
-        token_counts = self.count_tokens_via_api(chunk_texts)
+        #token_counts = self.count_tokens_via_api(chunk_texts)
         
         if token_counts is None or len(token_counts) != len(chunks):
             # Fallback: реалистичная оценка
@@ -376,15 +376,15 @@ class PipelineJSONProcessor:
         # 6. Финальная проверка размера
         print(f"\n Финальная проверка:")
         print(f"  Размер промпта: {len(prompt):,} символов")
-        
+        #token_counts = self.count_tokens_via_api(chunk_texts)
         # Пробуем точный подсчёт
-        final_tokens = self.count_tokens_via_api([prompt])
-        if final_tokens:
-            final_tokens = final_tokens[0]
-            print(f"  Токенов (точно): {final_tokens:,}")
-        else:
-            final_tokens = estimate_tokens_gigachat(prompt)
-            print(f"  Токенов (оценка): {final_tokens:,}")
+        #final_tokens = self.count_tokens_via_api([prompt])
+        #if final_tokens:
+           # final_tokens = final_tokens[0]
+          #  print(f"  Токенов (точно): {final_tokens:,}")
+       # else:
+        final_tokens = estimate_tokens_gigachat(prompt)
+        print(f"  Токенов (оценка): {final_tokens:,}")
         
         print(f"  Лимит GigaChat: {MODEL_CONFIG['context_window']:,}")
         
