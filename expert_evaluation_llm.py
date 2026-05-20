@@ -101,6 +101,7 @@ class LLMExpertEvaluator:
                     "Соответствует ли уровень сложности заявленному?"
                 ]
             }
+        }
     
     def _extract_chunks_text(self, chunks_data: Dict, max_chunks: int = 5) -> str:
         """Извлекает текст из первых N чанков для контекста"""
