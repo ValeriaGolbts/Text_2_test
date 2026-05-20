@@ -191,7 +191,7 @@ class LLMExpertEvaluator:
         Returns:
             Словарь с оценками по критериям
         """
-        print(f"\n  📊 Оценка теста: {Path(test_path).name}")
+        print(f"\n   Оценка теста: {Path(test_path).name}")
         
         # Загрузка данных
         with open(chunks_path, 'r', encoding='utf-8') as f:
@@ -239,12 +239,12 @@ class LLMExpertEvaluator:
             if verbose:
                 scores = [evaluation.get(k, {}).get('score', 0) for k in self.criteria.keys()]
                 avg_score = sum(scores) / len(scores) if scores else 0
-                print(f"    📈 Средняя оценка: {avg_score:.1f}/5 | Общая: {evaluation.get('overall_score', '?')}/5")
+                print(f"     Средняя оценка: {avg_score:.1f}/5 | Общая: {evaluation.get('overall_score', '?')}/5")
             
             return evaluation
             
         except Exception as e:
-            print(f"    ❌ Ошибка: {e}")
+            print(f"     Ошибка: {e}")
             return {"error": str(e), "test_file": str(test_path)}
     
     async def evaluate_multiple(self, 
@@ -291,7 +291,7 @@ class LLMExpertEvaluator:
             output_path = f"expert_evaluation_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(results, f, ensure_ascii=False, indent=2)
-            print(f"\n💾 Результаты сохранены в: {output_path}")
+            print(f"\n Результаты сохранены в: {output_path}")
         
         return results
     
@@ -350,7 +350,7 @@ class LLMExpertEvaluator:
         Returns:
             Оценки со статистикой (среднее, std, min, max)
         """
-        print(f"\n🔬 Проверка консистентности LLM-as-judge ({num_runs} запусков)")
+        print(f"\n Проверка консистентности LLM-as-judge ({num_runs} запусков)")
         
         all_evaluations = []
         
@@ -393,7 +393,7 @@ class LLMExpertEvaluator:
         result['consistency_score'] = 1.0 - min(1.0, avg_std / 2)  # 0-1, чем выше, тем консистентнее
         
         if verbose:
-            print(f"\n📊 Результаты консистентности:")
+            print(f"\n Результаты консистентности:")
             print(f"   Среднее отклонение: {avg_std:.2f}")
             print(f"   Consistency score: {result['consistency_score']:.2%}")
             if avg_std <= 0.5:
@@ -434,39 +434,7 @@ class LLMExpertEvaluator:
         print(f"   Общая оценка: {best['overall_score']}/5")
 
 
-async def main():
-    """Пример использования"""
-    from api_client_b2b import GigaChatB2BClient
-    
-    # Инициализация
-    llm_client = GigaChatB2BClient()
-    evaluator = LLMExpertEvaluator(llm_client, temperature=0.2)
-    
-    # Пример: оценка одного теста
-    # result = await evaluator.evaluate_single("output.json", "test_result.json")
-    # print(json.dumps(result, indent=2, ensure_ascii=False))
-    
-    # Пример: оценка нескольких тестов (стратегий)
-    test_files = [
-        "test_result_S1_random_lecture_20260519.json",
-        "test_result_S2_key_terms_lecture_20260520.json",
-        "test_result_S3_semantic_lecture_20260520.json",
-        "test_result_S4_hybrid_lecture_20260520.json",
-    ]
-    
-    # Фильтруем существующие файлы
-    existing_tests = [f for f in test_files if Path(f).exists()]
-    
-    if existing_tests:
-        results = await evaluator.evaluate_multiple("output.json", existing_tests)
-        evaluator.print_comparison_table(results)
-    else:
-        print("Нет файлов с тестами для оценки")
-        
-        # Проверка консистентности на одном тесте
-        if Path("test_result.json").exists():
-            consistency = await evaluator.evaluate_with_consistency_check("output.json", "test_result.json")
-            print(f"Consistency score: {consistency['consistency_score']:.2%}")
+
 
 
 if __name__ == "__main__":
