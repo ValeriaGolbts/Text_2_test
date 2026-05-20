@@ -7,12 +7,16 @@ metrics_quality.py
 - Качество дистракторов (правдоподобность)
 - Однозначность ответа
 - Формат вопросов
+
+Результаты сохраняются в JSON файл.
 """
 
 import json
 import re
+from pathlib import Path
 from typing import List, Dict, Any, Set
 from collections import Counter
+from datetime import datetime
 
 
 class TestQualityMetrics:
@@ -20,12 +24,14 @@ class TestQualityMetrics:
     Метрики качества теста для технической дисциплины в вузе.
     """
     
-    def __init__(self, test_result: Dict):
+    def __init__(self, test_result: Dict, test_path: str = None):
         """
         Args:
             test_result: Результат генерации теста (JSON)
+            test_path: Путь к исходному файлу теста (для метаданных)
         """
         self.test = test_result
+        self.test_path = test_path
         self.questions = test_result.get('questions', [])
         
     def check_question_count(self, expected: int = 10) -> Dict:
@@ -311,6 +317,12 @@ class TestQualityMetrics:
         else:
             metrics["grade"] = "Требует доработки"
         
+        # Добавляем метаданные о времени и исходном файле
+        metrics["metadata"] = {
+            "evaluated_at": datetime.now().isoformat(),
+            "source_test_file": str(self.test_path) if self.test_path else "unknown"
+        }
+        
         return metrics
     
     def print_report(self):
@@ -334,15 +346,59 @@ class TestQualityMetrics:
                 print(f"   ⚠️ Проблем: {len(check.get('issues', []))}")
         
         print("=" * 70)
+    
+    def save_results(self, output_path: str = None) -> str:
+        """
+        Сохраняет результаты метрик в JSON файл.
+        
+        Args:
+            output_path: Путь для сохранения (если не указан, создается автоматически)
+        
+        Returns:
+            Путь к сохраненному файлу
+        """
+        metrics = self.calculate_all_metrics()
+        
+        # Если путь не указан, создаем автоматически
+        if output_path is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Получаем имя исходного теста
+            if self.test_path:
+                source_name = Path(self.test_path).stem
+                output_path = f"quality_metrics_{source_name}_{timestamp}.json"
+            else:
+                output_path = f"quality_metrics_{timestamp}.json"
+        
+        # Сохраняем в JSON
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(metrics, f, ensure_ascii=False, indent=2)
+        
+        print(f"\n💾 Результаты метрик сохранены в: {output_path}")
+        return output_path
 
 
-def analyze_test(test_path: str):
-    """Утилита для анализа теста из JSON файла"""
+def analyze_test(test_path: str, save_results: bool = True) -> Dict[str, Any]:
+    """
+    Утилита для анализа теста из JSON файла с сохранением результатов.
+    
+    Args:
+        test_path: Путь к файлу с тестом
+        save_results: Сохранять ли результаты в JSON
+    
+    Returns:
+        Словарь с метриками
+    """
     with open(test_path, 'r', encoding='utf-8') as f:
         test_data = json.load(f)
     
-    analyzer = TestQualityMetrics(test_data)
+    analyzer = TestQualityMetrics(test_data, test_path=test_path)
     analyzer.print_report()
+    
+    if save_results:
+        output_path = analyzer.save_results()
+        print(f"\n📁 Результаты сохранены: {output_path}")
+    
     return analyzer.calculate_all_metrics()
 
 
@@ -350,4 +406,9 @@ if __name__ == "__main__":
     import sys
     
     test_file = sys.argv[1] if len(sys.argv) > 1 else "test_result.json"
-    analyze_test(test_file)
+    save = len(sys.argv) <= 2 or sys.argv[2] != "--no-save"
+    
+    results = analyze_test(test_file, save_results=save)
+    
+    # Выводим итоговую оценку
+    print(f"\n🎯 ИТОГОВАЯ ОЦЕНКА ТЕСТА: {results['grade']} (Quality Score: {results['overall_quality_score']:.2%})")
