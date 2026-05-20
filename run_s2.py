@@ -35,7 +35,7 @@ class PipelineJSONProcessor:
     
     def __init__(self):
         self.client = GigaChatB2BClient()
-        print(f"✅ Инициализирован B2B клиент")
+        print(f"Инициализирован B2B клиент")
     
     def count_tokens_via_api(self, texts: List[str]) -> List[int]:
         """
@@ -61,7 +61,7 @@ class PipelineJSONProcessor:
                 result = response.json()
                 
                 if isinstance(result, list):
-                    print(f"  ✅ Точный подсчёт через API выполнен")
+                    print(f"Точный подсчёт через API выполнен")
                     return [int(r) for r in result]
                 elif isinstance(result, dict):
                     # Разные форматы ответа
@@ -70,10 +70,10 @@ class PipelineJSONProcessor:
                     elif "data" in result and isinstance(result["data"], list):
                         return [int(r) for r in result["data"]]
                     else:
-                        print(f"  ⚠ Неизвестный формат ответа API")
+                        print(f"Неизвестный формат ответа API")
                         return None
             else:
-                print(f"  ⚠ API Error {response.status_code}: {response.text[:200]}")
+                print(f"API Error {response.status_code}: {response.text[:200]}")
                 return None
                 
         except Exception as e:
@@ -85,10 +85,10 @@ class PipelineJSONProcessor:
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            print(f"📁 Загружен JSON: {json_path}")
+            print(f"Загружен JSON: {json_path}")
             return data
         except Exception as e:
-            print(f"❌ Ошибка загрузки JSON: {e}")
+            print(f"Ошибка загрузки JSON: {e}")
             return {}
     
     def select_chunks_80_percent(self, pipeline_data: Dict[str, Any]) -> Tuple[List[Dict], Dict]:
@@ -106,41 +106,40 @@ class PipelineJSONProcessor:
         if not chunks:
             return [], {"error": "Нет чанков для отбора"}
         
-        print(f"\n{'='*60}")
-        print(f"📊 АНАЛИЗ ЧАНКОВ И РАСЧЁТ ЛИМИТОВ")
-        print(f"{'='*60}")
-        print(f"  • Всего чанков в файле: {len(chunks)}")
+        
+        print(f"Анализ чанков и расчет лимитов")
+        print(f"Всего чанков: {len(chunks)}")
         
         # === ШАГ 1: Подсчёт токенов ===
         chunk_texts = [chunk.get('processed_text', '') for chunk in chunks]
         
-        print(f"\n🔢 ПОДСЧЁТ ТОКЕНОВ:")
+        print(f"\n Подсчет токенов:")
         
         # Пробуем точный подсчёт через API
         token_counts = self.count_tokens_via_api(chunk_texts)
         
         if token_counts is None or len(token_counts) != len(chunks):
             # Fallback: реалистичная оценка
-            print(f"  • Использую реалистичную оценку токенов")
+            print(f" Использую реалистичную оценку токенов")
             token_counts = [estimate_tokens_gigachat(text) for text in chunk_texts]
             
             # Показываем сравнение со старой оценкой
             old_estimate = sum(len(t) // 3.5 for t in chunk_texts)
             new_estimate = sum(token_counts)
-            print(f"  • Старая оценка (3.5 симв/ток): {old_estimate:,} токенов")
-            print(f"  • Новая оценка (с формулами): {new_estimate:,} токенов")
+            print(f"Старая оценка (3.5 симв/ток): {old_estimate:,} токенов")
+            print(f"Новая оценка (с формулами): {new_estimate:,} токенов")
             if old_estimate > 0:
-                print(f"  • Разница: в {new_estimate/old_estimate:.1f} раз больше")
+                print(f"Разница: в {new_estimate/old_estimate:.1f} раз больше")
         
         total_tokens = sum(token_counts)
         avg_tokens = total_tokens // len(chunks) if chunks else 0
         
-        print(f"  • Общий объём: {total_tokens:,} токенов")
-        print(f"  • Средний чанк: {avg_tokens} токенов")
-        print(f"  • Мин/Макс чанка: {min(token_counts)}/{max(token_counts)} токенов")
+        print(f"Общий объём: {total_tokens:,} токенов")
+        print(f"Средний чанк: {avg_tokens} токенов")
+        print(f" Мин/Макс чанка: {min(token_counts)}/{max(token_counts)} токенов")
         
         # === ШАГ 2: Расчёт лимитов ===
-        print(f"\n📐 РАСЧЁТ ДОСТУПНОГО МЕСТА:")
+        print(f"\n Расчет доступного места:")
         
         # Параметры GigaChat Pro
         MAX_CONTEXT = MODEL_CONFIG["context_window"]  # 130 048
@@ -152,14 +151,14 @@ class PipelineJSONProcessor:
             (MAX_CONTEXT - RESPONSE_RESERVE - PROMPT_OVERHEAD) * SAFETY_MARGIN
         )
         
-        print(f"  • Контекст GigaChat Pro: {MAX_CONTEXT:,} токенов")
-        print(f"  • Резерв на ответ: {RESPONSE_RESERVE:,} токенов")
-        print(f"  • Накладные расходы: {PROMPT_OVERHEAD:,} токенов")
-        print(f"  • Запас безопасности: {SAFETY_MARGIN*100:.0f}%")
-        print(f"  • ДОСТУПНО ДЛЯ ЧАНКОВ: {available_tokens:,} токенов")
+        print(f"  Контекст GigaChat Pro: {MAX_CONTEXT:,} токенов")
+        print(f"  Резерв на ответ: {RESPONSE_RESERVE:,} токенов")
+        print(f"  Накладные расходы: {PROMPT_OVERHEAD:,} токенов")
+        print(f"  Запас безопасности: {SAFETY_MARGIN*100:.0f}%")
+        print(f"  ДОСТУПНО ДЛЯ ЧАНКОВ: {available_tokens:,} токенов")
         
         # === ШАГ 3: Сколько чанков РЕАЛЬНО влезает ===
-        print(f"\n📦 СКОЛЬКО ЧАНКОВ ВЛЕЗАЕТ:")
+        print(f"\n СКОЛЬКО ЧАНКОВ ВЛЕЗАЕТ:")
         
         # Сортируем по токенам (для точного подсчёта)
         chunks_with_tokens = list(zip(chunks, token_counts))
@@ -174,18 +173,18 @@ class PipelineJSONProcessor:
             tokens_used += tokens
             max_chunks_real += 1
         
-        print(f"  • Максимально влезает: {max_chunks_real} чанков")
-        print(f"  • Это {max_chunks_real/len(chunks)*100:.1f}% от всех чанков")
+        print(f" Максимально влезает: {max_chunks_real} чанков")
+        print(f" Это {max_chunks_real/len(chunks)*100:.1f}% от всех чанков")
         
         if max_chunks_real < len(chunks):
-            print(f"  • Не влезает: {len(chunks) - max_chunks_real} чанков")
+            print(f" Не влезает: {len(chunks) - max_chunks_real} чанков")
         
         # === ШАГ 4: Стратегия 80% ===
         target_chunks = max(2, int(max_chunks_real * 0.6))
         
-        print(f"\n🎯 СТРАТЕГИЯ 80% ОТ МАКСИМУМА:")
-        print(f"  • 100% (максимально влезает): {max_chunks_real} чанков")
-        print(f"  • 80% от максимума: {target_chunks} чанков")
+        print(f"\n Стратегия 80% от макимума:")
+        print(f"  100% (максимально влезает): {max_chunks_real} чанков")
+        print(f"  80% от максимума: {target_chunks} чанков")
         
         # === ШАГ 5: Сортировка по информативности ===
         chunks_scored = []
@@ -220,14 +219,14 @@ class PipelineJSONProcessor:
         for c in chunks_scored:
             all_terms.update(c["key_terms"])
         
-        print(f"\n✅ ОТБОР {target_chunks} ЛУЧШИХ ЧАНКОВ:")
+        print(f"\n Отбор {target_chunks} лучших:")
         
         for i, item in enumerate(chunks_scored):
             if len(selected) >= target_chunks:
                 break
             
             if selected_tokens + item["tokens"] > available_tokens:
-                print(f"  ⚠ Достигнут лимит токенов на чанке {i+1}")
+                print(f" Достигнут лимит токенов на чанке {i+1}")
                 break
             
             selected.append(item["chunk"])
@@ -256,15 +255,13 @@ class PipelineJSONProcessor:
             "terms_coverage_pct": round(terms_pct, 1),
             "strategy": "80_percent_of_max_possible"
         }
-        
-        print(f"\n{'='*60}")
-        print(f"📊 РЕЗУЛЬТАТ ОТБОРА")
-        print(f"{'='*60}")
-        print(f"  • Отобрано: {len(selected)} из {max_chunks_real} возможных")
-        print(f"  • Токенов: {selected_tokens:,} из {available_tokens:,} "
+    
+        print(f" Резльтат отбора")
+        print(f"  Отобрано: {len(selected)} из {max_chunks_real} возможных")
+        print(f"  Токенов: {selected_tokens:,} из {available_tokens:,} "
               f"({selection_info['token_usage_pct']}%)")
-        print(f"  • Покрытие формул: {formulas_pct:.1f}%")
-        print(f"  • Покрытие терминов: {terms_pct:.1f}%")
+        print(f"  Покрытие формул: {formulas_pct:.1f}%")
+        print(f"  Покрытие терминов: {terms_pct:.1f}%")
         
         return selected, selection_info
     
@@ -276,7 +273,7 @@ class PipelineJSONProcessor:
             if text:
                 texts.append(text)
         
-        print(f"\n📝 Извлечено {len(texts)} текстовых блоков")
+        print(f"\n Извлечено {len(texts)} текстовых блоков")
         
         if texts:
             preview = texts[0][:150].replace('\n', ' ')
@@ -347,9 +344,7 @@ class PipelineJSONProcessor:
                                     num_questions: int = 10) -> Dict[str, Any]:
         """Основной метод обработки"""
         
-        print("=" * 70)
-        print("🚀 ОБРАБОТКА JSON: СТРАТЕГИЯ 80% ОТ МАКСИМУМА")
-        print("=" * 70)
+        print("ОБРАБОТКА.")
         
         # 1. Загружаем JSON
         pipeline_data = self.load_pipeline_json(json_path)
@@ -370,31 +365,31 @@ class PipelineJSONProcessor:
         
         # 4. Метаданные
         metadata = self.get_metadata(pipeline_data)
-        print(f"\n📋 Метаданные:")
-        print(f"  • Файл: {metadata['source_file']}")
-        print(f"  • Чанков в файле: {metadata['total_chunks']}")
-        print(f"  • Отобрано: {len(selected_chunks)}")
+        print(f"\n Метаданные:")
+        print(f" Файл: {metadata['source_file']}")
+        print(f" Чанков в файле: {metadata['total_chunks']}")
+        print(f" Отобрано: {len(selected_chunks)}")
         
         # 5. Создаем промпт
         prompt = self.create_prompt(texts, num_questions, selection_info)
         
         # 6. Финальная проверка размера
-        print(f"\n📤 ФИНАЛЬНАЯ ПРОВЕРКА:")
-        print(f"  • Размер промпта: {len(prompt):,} символов")
+        print(f"\n Финальная проверка:")
+        print(f"  Размер промпта: {len(prompt):,} символов")
         
         # Пробуем точный подсчёт
         final_tokens = self.count_tokens_via_api([prompt])
         if final_tokens:
             final_tokens = final_tokens[0]
-            print(f"  • Токенов (точно): {final_tokens:,}")
+            print(f"  Токенов (точно): {final_tokens:,}")
         else:
             final_tokens = estimate_tokens_gigachat(prompt)
-            print(f"  • Токенов (оценка): {final_tokens:,}")
+            print(f"  Токенов (оценка): {final_tokens:,}")
         
-        print(f"  • Лимит GigaChat: {MODEL_CONFIG['context_window']:,}")
+        print(f"  Лимит GigaChat: {MODEL_CONFIG['context_window']:,}")
         
         if final_tokens > MODEL_CONFIG['context_window'] * 0.95:
-            print(f"  ⚠ Промпт всё ещё большой! Экстренно уменьшаем...")
+            print(f" Промпт всё ещё большой!")
             while final_tokens > MODEL_CONFIG['context_window'] * 0.95 and len(texts) > 2:
                 texts = texts[:-1]
                 prompt = self.create_prompt(texts, num_questions, selection_info)
@@ -402,7 +397,7 @@ class PipelineJSONProcessor:
                 print(f"    Уменьшено до {len(texts)} текстов, ~{final_tokens:,} токенов")
         
         # 7. Отправляем в GigaChat
-        print(f"\n📤 Отправка в GigaChat...")
+        print(f"\n Отправка запроса в GigaChat")
         messages = [{"role": "user", "content": prompt}]
         
         try:
@@ -412,7 +407,7 @@ class PipelineJSONProcessor:
                 temperature=0.7
             )
             
-            print(f"✅ Ответ получен")
+            print(f"Ответ получен!")
             
             content = response['choices'][0]['message']['content']
             
@@ -457,16 +452,16 @@ class PipelineJSONProcessor:
                                
             try:
                 test_result = json.loads(json_str)
-                print("  ✅ JSON успешно распарсен")
+                print(" JSON успешно распарсен")
             except json.JSONDecodeError as e:
-                print(f"  ⚠ Ошибка JSON (попытка 1): {e}")
+                print(f" Ошибка JSON (попытка 1): {e}")
                 
                 try:
                     cleaned_json = clean_json_for_parsing(json_str)
                     test_result = json.loads(cleaned_json)
-                    print("  ✅ JSON распарсен после очистки LaTeX")
+                    print(" JSON распарсен после очистки LaTeX")
                 except json.JSONDecodeError as e2:
-                    print(f"  ⚠ Ошибка JSON (попытка 2): {e2}")
+                    print(f" Ошибка JSON (попытка 2): {e2}")
                     
                     try:
                         json_pattern = r'\{(?:[^{}]|(?:\{[^{}]*\}))*\}'
@@ -478,16 +473,16 @@ class PipelineJSONProcessor:
                             except:
                                 cleaned = clean_json_for_parsing(found_json)
                                 test_result = json.loads(cleaned)
-                            print("  ✅ JSON найден через регулярку")
+                            print(" JSON найден через регулярку")
                     except Exception as e3:
-                        print(f"  ⚠ Ошибка JSON (попытка 3): {e3}")
+                        print(f" Ошибка JSON (попытка 3): {e3}")
                         
                         try:
                             no_latex = re.sub(r'\\[a-zA-Z]+', '', json_str)
                             test_result = json.loads(no_latex)
-                            print("  ✅ JSON распарсен после удаления LaTeX")
+                            print(" JSON распарсен после удаления LaTeX")
                         except Exception as e4:
-                            print(f"  ⚠ Все попытки парсинга не удались")
+                            print(f" Все попытки парсинга не удались")
                             test_result = {
                                 "raw_response": content,
                                 "questions": [],
@@ -506,7 +501,7 @@ class PipelineJSONProcessor:
             return test_result
             
         except Exception as e:
-            print(f"❌ Ошибка: {e}")
+            print(f" Ошибка: {e}")
             return {
                 "error": str(e),
                 "pipeline_metadata": metadata,
@@ -524,7 +519,7 @@ class PipelineJSONProcessor:
             raw_path = output_path.replace('.json', '_raw.txt')
             with open(raw_path, 'w', encoding='utf-8') as f:
                 f.write(result["raw_response"])
-            print(f"💾 Сырой ответ сохранён: {raw_path}")
+            print(f" Сырой ответ сохранён: {raw_path}")
         
         # Сохраняем JSON (конвертируем сложные объекты в строки)
         try:
@@ -538,7 +533,7 @@ class PipelineJSONProcessor:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(serializable_result, f, ensure_ascii=False, indent=2)
         
-        print(f"💾 Результат сохранён: {output_path}")
+        print(f" Результат сохранён: {output_path}")
         return output_path
            
 
@@ -548,16 +543,16 @@ async def main():
     json_file = r"C:\Users\валерия\Projects\Text_2_test\output.json"
     
     if not Path(json_file).exists():
-        print(f"❌ Файл не найден: {json_file}")
+        print(f" Файл не найден: {json_file}")
         
         current_dir = Path(__file__).parent
         possible_files = list(current_dir.glob("*.json"))
         if possible_files:
-            print(f"\n🔍 Найденные JSON файлы:")
+            print(f"\n Найденные JSON файлы:")
             for f in possible_files:
                 print(f"  • {f}")
             json_file = str(possible_files[0])
-            print(f"\n📁 Использую: {json_file}")
+            print(f"\n Использую: {json_file}")
         else:
             return
     
@@ -571,29 +566,15 @@ async def main():
     if 'error' not in result:
         output_file = processor.save_result(result)
         
-        print("\n" + "=" * 70)
-        print("📊 РЕЗУЛЬТАТ ГЕНЕРАЦИИ ТЕСТА")
-        print("=" * 70)
-        print(f"Название: {result.get('test_title', 'N/A')}")
-        print(f"Тема: {result.get('subject', 'N/A')}")
-        print(f"Вопросов: {len(result.get('questions', []))}")
-        
+        print("РЕЗУЛЬТАТ")
+                
         selection_info = result.get('selection_info', {})
         if selection_info:
             print(f"\n📈 СТАТИСТИКА ОТБОРА:")
-            print(f"  • Отобрано: {selection_info['selected_count']} чанков")
-            print(f"  • Покрытие формул: {selection_info['formulas_coverage_pct']}%")
-            print(f"  • Покрытие терминов: {selection_info['terms_coverage_pct']}%")
-            print(f"  • Использовано токенов: {selection_info['selected_tokens']:,}")
-        
-        if result.get('questions'):
-            q = result['questions'][0]
-            print(f"\n📝 ПРИМЕР ВОПРОСА:")
-            print(f"  {q.get('question', '')}")
-            print(f"  Варианты: {q.get('options', [])}")
-            print(f"  Ответ: {q.get('correct_answer', '')}")
-    else:
-        print(f"\n❌ Ошибка: {result['error']}")
+            print(f"  Отобрано: {selection_info['selected_count']} чанков")
+            print(f"  Покрытие формул: {selection_info['formulas_coverage_pct']}%")
+            print(f"  Покрытие терминов: {selection_info['terms_coverage_pct']}%")
+            print(f"  Использовано токенов: {selection_info['selected_tokens']:,}")
 
 
 if __name__ == "__main__":
