@@ -23,11 +23,9 @@ async def main():
     
     # Список тестов для оценки (замените на ваши файлы)
     test_files = [
-        "s5_1.json",
-        "s5_2.json",
-        "s5_3.json",
-        "s5_4.json",
-        "s5_5.json",
+        "audio_4.json",
+        "audio_3.json",
+        "audio_2.json",
     ]
     
     # Фильтруем существующие файлы
