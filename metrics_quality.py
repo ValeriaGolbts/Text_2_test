@@ -329,23 +329,21 @@ class TestQualityMetrics:
         """Выводит отчет о качестве теста"""
         metrics = self.calculate_all_metrics()
         
-        print("\n" + "=" * 70)
+        
         print(f"ОТЧЕТ О КАЧЕСТВЕ ТЕСТА: {metrics['test_title']}")
-        print("=" * 70)
         print(f"Всего вопросов: {metrics['total_questions']}")
         print(f"Итоговый Quality Score: {metrics['overall_quality_score']:.2%}")
         print(f"Оценка: {metrics['grade']}")
-        print("-" * 70)
         
         for metric_name, check in metrics['quality_checks'].items():
-            status = "✅" if check.get('is_valid', check.get('score', 0) >= 0.7) else "⚠️"
+            status = "Хорошо" if check.get('is_valid', check.get('score', 0) >= 0.7) else "!"
             print(f"{status} {metric_name}: {check['score']:.0%}")
             
             # Детали для критических метрик
             if metric_name == "Качество дистракторов" and check.get('issues'):
-                print(f"   ⚠️ Проблем: {len(check.get('issues', []))}")
+                print(f" Проблем: {len(check.get('issues', []))}")
         
-        print("=" * 70)
+        
     
     def save_results(self, output_path: str = None) -> str:
         """
@@ -374,7 +372,7 @@ class TestQualityMetrics:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(metrics, f, ensure_ascii=False, indent=2)
         
-        print(f"\n💾 Результаты метрик сохранены в: {output_path}")
+        print(f"\n Результаты метрик сохранены в: {output_path}")
         return output_path
 
 
@@ -397,7 +395,7 @@ def analyze_test(test_path: str, save_results: bool = True) -> Dict[str, Any]:
     
     if save_results:
         output_path = analyzer.save_results()
-        print(f"\n📁 Результаты сохранены: {output_path}")
+        print(f"\n Результаты сохранены: {output_path}")
     
     return analyzer.calculate_all_metrics()
 
