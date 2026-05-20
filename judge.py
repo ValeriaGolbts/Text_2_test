@@ -23,7 +23,7 @@ async def main():
     
     # Список тестов для оценки (замените на ваши файлы)
     test_files = [
-        "s5_1json",
+        "s5_1.json",
         "s5_2.json",
         "s5_3.json",
         "s5_4.json",
