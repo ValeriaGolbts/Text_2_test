@@ -570,7 +570,7 @@ async def main():
                 
         selection_info = result.get('selection_info', {})
         if selection_info:
-            print(f"\n📈 СТАТИСТИКА ОТБОРА:")
+            print(f"\n СТАТИСТИКА ОТБОРА:")
             print(f"  Отобрано: {selection_info['selected_count']} чанков")
             print(f"  Покрытие формул: {selection_info['formulas_coverage_pct']}%")
             print(f"  Покрытие терминов: {selection_info['terms_coverage_pct']}%")
