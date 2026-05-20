@@ -54,7 +54,7 @@ class PipelineJSONProcessor:
     
     def __init__(self):
         self.client = GigaChatB2BClient()
-        print(f"[OK] Инициализирован B2B клиент")
+        print(f"Инициализирован B2B клиент")
     
     def count_tokens_via_api(self, texts: List[str]) -> List[int]:
         """Точный подсчёт токенов через GigaChat API"""
@@ -207,12 +207,10 @@ class PipelineJSONProcessor:
         if not chunks:
             return [], {"error": "Нет чанков для отбора"}
         
-        print(f"\n{'='*60}")
-        print(f"[СТРАТЕГИЯ] ПОЛЗУЧЕЕ НАКОПЛЕНИЕ (ДО {fill_pct}%)")
-        print(f"{'='*60}")
         
+        print(f"НАКОПЛЕНИЕ (ДО {fill_pct}%)")        
         # === ШАГ 1: Фильтрация некачественных чанков ===
-        print(f"\n[ШАГ 1] Фильтрация качества...")
+        print(f"\n ШАГ 1. Фильтрация качества.")
         print(f"  * Всего чанков: {len(chunks)}")
         
         passed_chunks = []
@@ -225,16 +223,16 @@ class PipelineJSONProcessor:
             else:
                 rejected_stats[reason] = rejected_stats.get(reason, 0) + 1
         
-        print(f"  * Прошло фильтрацию: {len(passed_chunks)} чанков")
-        print(f"  * Отклонено: {len(chunks) - len(passed_chunks)} чанков")
+        print(f"  Прошло фильтрацию: {len(passed_chunks)} чанков")
+        print(f"  Отклонено: {len(chunks) - len(passed_chunks)} чанков")
         
         if rejected_stats:
-            print(f"  * Причины отклонения:")
+            print(f"  Причины отклонения:")
             for reason, count in sorted(rejected_stats.items(), 
                                         key=lambda x: -x[1])[:5]:
                 print(f"    - {reason}: {count}")
             if len(rejected_stats) > 5:
-                print(f"    ... и ещё {len(rejected_stats) - 5} причин")
+                print(f"    и ещё {len(rejected_stats) - 5} причин")
         
         if not passed_chunks:
             print(f"  [WARN] Все чанки отклонены! Использую все без фильтрации.")
@@ -242,7 +240,7 @@ class PipelineJSONProcessor:
                            for i, c in enumerate(chunks)]
         
         # === ШАГ 2: Scoring и подсчёт токенов ===
-        print(f"\n[ШАГ 2] Оценка информативности и токенов...")
+        print(f"\n ШАГ 2. Оценка информативности и токенов")
         
         for item in passed_chunks:
             text = item['chunk'].get('processed_text', '')
@@ -259,13 +257,13 @@ class PipelineJSONProcessor:
         tokens_list = [item['tokens'] for item in passed_chunks]
         
         if scores:
-            print(f"  * Score: мин={min(scores):.1f}, макс={max(scores):.1f}, "
+            print(f"  Score: мин={min(scores):.1f}, макс={max(scores):.1f}, "
                   f"сред={sum(scores)/len(scores):.1f}")
-            print(f"  * Токены: мин={min(tokens_list)}, макс={max(tokens_list)}, "
+            print(f"  Токены: мин={min(tokens_list)}, макс={max(tokens_list)}, "
                   f"сред={sum(tokens_list)//len(tokens_list)}")
         
         # === ШАГ 3: Расчёт лимитов ===
-        print(f"\n[ШАГ 3] Расчёт лимитов контекстного окна...")
+        print(f"\n ШАГ 3. Расчёт лимитов контекстного окна.")
         
         MAX_CONTEXT = MODEL_CONFIG["context_window"]       # 130 048
         RESPONSE_RESERVE = MODEL_CONFIG["max_output_tokens"]  # 4 096
@@ -283,18 +281,18 @@ class PipelineJSONProcessor:
         # Запасное пространство = безопасный лимит - целевой порог
         buffer_space = safe_limit - target_limit
         
-        print(f"  * Контекст GigaChat: {MAX_CONTEXT:,} токенов")
-        print(f"  * Резерв на ответ: {RESPONSE_RESERVE:,} токенов")
-        print(f"  * Накладные расходы: {PROMPT_OVERHEAD:,} токенов")
-        print(f"  * Коэффициент запаса: {SAFETY_FACTOR}")
-        print(f"  * Безопасный лимит: {safe_limit:,} токенов")
-        print(f"  * Целевой порог ({fill_pct}%): {target_limit:,} токенов")
-        print(f"  * Запасное пространство: {buffer_space:,} токенов")
-        print(f"  * Порог расширения (30% от запаса): {int(buffer_space * 0.3):,} токенов")
+        print(f"  Контекст GigaChat: {MAX_CONTEXT:,} токенов")
+        print(f"  Резерв на ответ: {RESPONSE_RESERVE:,} токенов")
+        print(f"  Накладные расходы: {PROMPT_OVERHEAD:,} токенов")
+        print(f"  Коэффициент запаса: {SAFETY_FACTOR}")
+        print(f"  Безопасный лимит: {safe_limit:,} токенов")
+        print(f"  Целевой порог ({fill_pct}%): {target_limit:,} токенов")
+        print(f"  Запасное пространство: {buffer_space:,} токенов")
+        print(f"  Порог расширения (30% от запаса): {int(buffer_space * 0.3):,} токенов")
         
         # === ШАГ 4: Ползучее накопление с умным расширением ===
-        print(f"\n[ШАГ 4] Ползучее накопление с умным расширением...")
-        print(f"  Добавляем чанки по одному...")
+        print(f"\n ШАГ 4. Накопление с умным расширением.")
+        print(f"  Добавляем чанки по одному.")
         
         selected = []
         selected_tokens = 0
@@ -351,14 +349,14 @@ class PipelineJSONProcessor:
                     chunk_count += 1
                     expansion_used = True
                     
-                    print(f"  [OK] Чанк {i}: ДОБАВЛЕН с РАСШИРЕНИЕМ")
-                    print(f"     * Остаток ({overflow} ток) <= 30% от запаса ({int(buffer_space * 0.3)} ток)")
-                    print(f"     * Новый лимит: {selected_tokens:,} ток (в пределах safe_limit={safe_limit:,})")
+                    print(f" Чанк {i}: ДОБАВЛЕН с РАСШИРЕНИЕМ")
+                    print(f"  Остаток ({overflow} ток) <= 30% от запаса ({int(buffer_space * 0.3)} ток)")
+                    print(f"  Новый лимит: {selected_tokens:,} ток (в пределах safe_limit={safe_limit:,})")
                     break  # Останавливаемся после добавления
                 else:
                     # Случай 3: Остаток слишком большой - ищем следующий подходящий чанк
                     if expansion_used:
-                        print(f"  * Расширение уже использовано, пропускаем чанк {i}")
+                        print(f"  Расширение уже использовано, пропускаем чанк {i}")
                     else:
                         reason = f"остаток ({overflow} ток) > 30% от запаса ({int(buffer_space * 0.3)} ток)"
                         print(f"  [SKIP] Пропускаем чанк {i}: {reason}")
@@ -369,9 +367,9 @@ class PipelineJSONProcessor:
         # Если вышли из цикла, но не использовали расширение - достигли целевого порога или кончились чанки
         if not expansion_used:
             if selected_tokens >= target_limit:
-                print(f"\n  [OK] Достигнут целевой порог {target_limit:,} токенов")
+                print(f"\n  Достигнут целевой порог {target_limit:,} токенов")
             else:
-                print(f"\n  [INFO] Закончились чанки, набрано {selected_tokens:,} из {target_limit:,} токенов")
+                print(f"\n  Закончились чанки, набрано {selected_tokens:,} из {target_limit:,} токенов")
         
         # === ШАГ 5: Статистика ===
         fill_percentage = (selected_tokens / safe_limit * 100) if safe_limit else 0
@@ -408,23 +406,22 @@ class PipelineJSONProcessor:
             "strategy": "accumulate_with_smart_expansion"
         }
         
-        print(f"\n{'='*60}")
-        print(f"[РЕЗУЛЬТАТ] ПОЛЗУЧЕЕ НАКОПЛЕНИЕ")
-        print(f"{'='*60}")
-        print(f"  * Отобрано чанков: {len(selected)}")
-        print(f"  * Заполнение безопасного лимита: {selected_tokens:,} из {safe_limit:,} ток "
+        
+        print(f"Результат накопления")
+        print(f"  Отобрано чанков: {len(selected)}")
+        print(f"  Заполнение безопасного лимита: {selected_tokens:,} из {safe_limit:,} ток "
               f"({fill_percentage:.1f}%)")
-        print(f"  * Достижение целевого порога: {target_achieved_pct:.1f}% ({selected_tokens:,}/{target_limit:,})")
-        print(f"  * Использовано расширение: {'ДА' if expansion_used else 'НЕТ'}")
-        print(f"  * Средний score: {avg_score:.1f}")
-        print(f"  * Покрытие формул: {formulas_pct:.1f}%")
-        print(f"  * Покрытие терминов: {terms_pct:.1f}%")
+        print(f"  Достижение целевого порога: {target_achieved_pct:.1f}% ({selected_tokens:,}/{target_limit:,})")
+        print(f"  Использовано расширение: {'ДА' if expansion_used else 'НЕТ'}")
+        print(f"  Средний score: {avg_score:.1f}")
+        print(f"  Покрытие формул: {formulas_pct:.1f}%")
+        print(f"  Покрытие терминов: {terms_pct:.1f}%")
         
         if not expansion_used and target_achieved_pct < fill_pct - 5:
-            print(f"  [WARN] Не достигнут целевой порог (не хватило чанков)")
+            print(f"  Не достигнут целевой порог (не хватило чанков)")
         
         if expansion_used:
-            print(f"  [OK] Расширение использовано корректно, safe_limit не превышен")
+            print(f"  Расширение использовано корректно, safe_limit не превышен")
         
         return selected, selection_info
     
@@ -506,10 +503,8 @@ class PipelineJSONProcessor:
                                     fill_pct: int = 90) -> Dict[str, Any]:
         """Основной метод обработки"""
         
-        print("=" * 70)
-        print(f"[ОБРАБОТКА] JSON: ПОЛЗУЧЕЕ НАКОПЛЕНИЕ (ДО {fill_pct}%)")
-        print("=" * 70)
-        
+    
+        print(f"ОБРАБОТКА JSON: ")
         # 1. Загружаем JSON
         pipeline_data = self.load_pipeline_json(json_path)
         if not pipeline_data:
@@ -531,27 +526,27 @@ class PipelineJSONProcessor:
         
         # 4. Метаданные
         metadata = self.get_metadata(pipeline_data)
-        print(f"\n[МЕТАДАННЫЕ]:")
-        print(f"  * Файл: {metadata['source_file']}")
-        print(f"  * Чанков в файле: {metadata['total_chunks']}")
-        print(f"  * Отобрано: {len(selected_chunks)}")
+        print(f"\n МЕТАДАННЫЕ:")
+        print(f"  Файл: {metadata['source_file']}")
+        print(f"  Чанков в файле: {metadata['total_chunks']}")
+        print(f"  Отобрано: {len(selected_chunks)}")
         
         # 5. Создаем промпт
         prompt = self.create_prompt(texts, num_questions, selection_info)
         
         # 6. Финальная проверка размера
-        print(f"\n[ФИНАЛЬНАЯ ПРОВЕРКА]:")
-        print(f"  * Размер промпта: {len(prompt):,} символов")
+        print(f"\n Финальная проверка:")
+        print(f"  Размер промпта: {len(prompt):,} символов")
         
         final_tokens = estimate_tokens_gigachat(prompt)
-        print(f"  * Токенов (оценка): {final_tokens:,}")
-        print(f"  * Лимит GigaChat: {MODEL_CONFIG['context_window']:,}")
+        print(f"  Токенов (оценка): {final_tokens:,}")
+        print(f"  Лимит GigaChat: {MODEL_CONFIG['context_window']:,}")
         
         context_fill = final_tokens / MODEL_CONFIG['context_window'] * 100
-        print(f"  * Заполнение контекста: {context_fill:.1f}%")
+        print(f"  Заполнение контекста: {context_fill:.1f}%")
         
         if context_fill > 95:
-            print(f"  [WARN] Превышен безопасный порог 95%!")
+            print(f" Превышен безопасный порог 95%!")
         
         # 7. Отправляем в GigaChat
         print(f"\n[ОТПРАВКА] Отправка в GigaChat...")
@@ -686,37 +681,26 @@ async def main():
     if 'error' not in result:
         output_file = processor.save_result(result)
         
-        print("\n" + "=" * 70)
-        print("[РЕЗУЛЬТАТ] ГЕНЕРАЦИЯ ТЕСТА")
-        print("=" * 70)
-        print(f"Название: {result.get('test_title', 'N/A')}")
-        print(f"Тема: {result.get('subject', 'N/A')}")
-        print(f"Вопросов: {len(result.get('questions', []))}")
-        
+      
+        print("РЕЗУЛЬТАТ ГЕНЕРАЦИЯ ТЕСТА")
+                
         selection_info = result.get('selection_info', {})
         if selection_info:
             print(f"\n[СТАТИСТИКА НАКОПЛЕНИЯ]:")
-            print(f"  * Стратегия: {selection_info.get('strategy', 'N/A')}")
-            print(f"  * Отобрано: {selection_info['selected_count']} чанков")
-            print(f"  * Заполнение: {selection_info.get('fill_percentage', 0)}%")
-            print(f"  * Средний score: {selection_info.get('avg_score', 0)}")
-            print(f"  * Покрытие формул: {selection_info['formulas_coverage_pct']}%")
-            print(f"  * Покрытие терминов: {selection_info['terms_coverage_pct']}%")
+        
+            print(f"  Отобрано: {selection_info['selected_count']} чанков")
+            print(f"  Заполнение: {selection_info.get('fill_percentage', 0)}%")
+            print(f"  Средний score: {selection_info.get('avg_score', 0)}")
+            print(f"  Покрытие формул: {selection_info['formulas_coverage_pct']}%")
+            print(f"  Покрытие терминов: {selection_info['terms_coverage_pct']}%")
         
         token_stats = result.get('token_stats', {})
         if token_stats:
-            print(f"\n[ТОКЕНЫ]:")
-            print(f"  * В промпте: {token_stats.get('final_prompt_tokens', 0):,}")
-            print(f"  * Заполнение контекста: {token_stats.get('context_fill_pct', 0)}%")
+            print(f"\n Токены:")
+            print(f"  В промпте: {token_stats.get('final_prompt_tokens', 0):,}")
+            print(f"  Заполнение контекста: {token_stats.get('context_fill_pct', 0)}%")
         
-        if result.get('questions'):
-            q = result['questions'][0]
-            print(f"\n[ПРИМЕР ВОПРОСА]:")
-            print(f"  {q.get('question', '')}")
-            print(f"  Варианты: {q.get('options', [])}")
-            print(f"  Ответ: {q.get('correct_answer', '')}")
-    else:
-        print(f"\n[ERROR] Ошибка: {result['error']}")
+        
 
 
 if __name__ == "__main__":
