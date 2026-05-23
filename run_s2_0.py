@@ -181,7 +181,7 @@ class PipelineJSONProcessor:
             print(f" Не влезает: {len(chunks) - max_chunks_real} чанков")
         
         # === ШАГ 4: Стратегия 80% ===
-        target_chunks = max(2, int(max_chunks_real * 0.6))
+        target_chunks = max(2, int(max_chunks_real * 0.8))
         
         print(f"\n Стратегия 80% от макимума:")
         print(f"  100% (максимально влезает): {max_chunks_real} чанков")
