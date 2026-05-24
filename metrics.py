@@ -149,6 +149,28 @@ class ContentMetricsCalculator:
         if not term:
             return ""
         return term.lower().strip()
+
+    def _normalize_question_text(self, text: str) -> str:
+        """
+        Нормализует текст вопроса для поиска терминов.
+        - Нижний регистр
+        - Удаление формул LaTeX
+        - Удаление знаков препинания
+        - Удаление лишних пробелов
+        """
+        if not text:
+            return ""
+        
+        # Нижний регистр
+        text = text.lower()
+        # Удаляем LaTeX формулы (все между $)
+        text = re.sub(r'\$[^\$]+\$', ' ', text)
+        # Удаляем знаки препинания
+        text = re.sub(r'[^\w\s]', ' ', text)
+        # Удаляем лишние пробелы
+        text = re.sub(r'\s+', ' ', text)
+        
+        return text.strip()
     
     def extract_formulas_from_test(self) -> Set[str]:
         """Извлекает формулы из вопросов теста"""
