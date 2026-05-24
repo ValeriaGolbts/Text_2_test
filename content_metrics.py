@@ -145,8 +145,7 @@ class TestMetrics:
                 )
 
                 if x:
-                    f
-                  ormulas.append(x)
+                    formulas.append(x)
 
         formulas=list(
             set(formulas)
