@@ -217,15 +217,14 @@ class ContentMetricsCalculator:
                     if re.search(rf'\b{re.escape(root)}\w*\b', normalized_text):
                         found_terms.add(term)
     
-    print(f"Найдено терминов: {len(found_terms)} / {len(all_chunk_terms)}")
+        print(f"Найдено терминов: {len(found_terms)} / {len(all_chunk_terms)}")
     
     # Для отладки: показываем ненайденные термины
-    if len(found_terms) < len(all_chunk_terms):
-        missing = all_chunk_terms - found_terms
-        print(f" Не охвачено терминов: {len(missing)}")
+        if len(found_terms) < len(all_chunk_terms):
+            missing = all_chunk_terms - found_terms
+            print(f" Не охвачено терминов: {len(missing)}")
         # print(f"   Примеры пропущенных: {list(missing)[:5]}")
-    
-    return found_terms
+        return found_terms
     
     def calculate_term_coverage(self) -> float:
         """
