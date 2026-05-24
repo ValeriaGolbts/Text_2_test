@@ -8,11 +8,10 @@ import tempfile
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm, inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, KeepTogether
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus.flowables import Flowable
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -87,8 +86,8 @@ def latex_to_image(latex_expr, fontsize=20):
     # Создаём объект Image reportlab
     img = Image(tmp_path)
     
-    # Устанавливаем размер формулы в 3 раза больше текста (текст ~4мм, формула ~12мм)
-    target_height = 1.2 * cm  # Высота формулы в 3 раза больше текста
+    # Устанавливаем размер формулы в 3 раза больше текста
+    target_height = 1.2 * cm  # Высота формулы
     aspect_ratio = img_width / img_height if img_height > 0 else 1
     target_width = target_height * aspect_ratio
     
@@ -134,78 +133,35 @@ def split_text_and_formulas(text):
     return parts
 
 # ----------------------------------------------------------------------
-# 4. Создание смешанного параграфа (текст + формулы в одной строке)
+# 4. Создание элементов для отображения текста с формулами в одной строке
 # ----------------------------------------------------------------------
-class InlineFormulaParagraph(Flowable):
-    """Flowable, который объединяет текст и формулы в одной строке."""
+def create_inline_elements(content, style):
+    """
+    Создает список элементов, где текст и формулы чередуются.
+    Используем таблицу для удержания элементов в одной строке.
+    """
+    parts = split_text_and_formulas(content)
+    elements = []
+    temp_files = []
     
-    def __init__(self, content, style, font_name='CyrFont'):
-        Flowable.__init__(self)
-        self.content = content
-        self.style = style
-        self.font_name = font_name
-        self.temp_files = []
-        self._setup()
+    for typ, value in parts:
+        if typ == 'text':
+            clean_text = ' '.join(value.split())
+            if clean_text:
+                clean_text = clean_text.replace('&', '&amp;')
+                clean_text = clean_text.replace('<', '&lt;')
+                clean_text = clean_text.replace('>', '&gt;')
+                elements.append(Paragraph(clean_text, style))
+        else:  # latex
+            try:
+                img, tmp_path = latex_to_image(value)
+                temp_files.append(tmp_path)
+                elements.append(img)
+            except Exception as e:
+                print(f"Ошибка при конвертации формулы '{value}': {e}")
+                elements.append(Paragraph(f"${value}$", style))
     
-    def _setup(self):
-        """Подготавливает элементы для отображения."""
-        self.elements = []
-        parts = split_text_and_formulas(self.content)
-        
-        for typ, value in parts:
-            if typ == 'text':
-                clean_text = ' '.join(value.split())
-                if clean_text:
-                    clean_text = clean_text.replace('&', '&amp;')
-                    clean_text = clean_text.replace('<', '&lt;')
-                    clean_text = clean_text.replace('>', '&gt;')
-                    self.elements.append(('text', clean_text))
-            else:  # latex
-                try:
-                    img, tmp_path = latex_to_image(value)
-                    self.temp_files.append(tmp_path)
-                    self.elements.append(('image', img))
-                except Exception as e:
-                    print(f"Ошибка при конвертации формулы '{value}': {e}")
-                    self.elements.append(('text', f"${value}$"))
-    
-    def wrap(self, availWidth, availHeight):
-        """Определяет размеры Flowable."""
-        self.availWidth = availWidth
-        # Рассчитываем общую высоту и ширину
-        max_height = 0
-        total_width = 0
-        
-        for elem_type, elem in self.elements:
-            if elem_type == 'text':
-                # Создаем временный параграф для измерения
-                p = Paragraph(elem, self.style)
-                w, h = p.wrap(availWidth, availHeight)
-                max_height = max(max_height, h)
-                total_width += w
-            else:  # image
-                max_height = max(max_height, elem.drawHeight)
-                total_width += elem.drawWidth
-        
-        self.height = max_height
-        self.width = min(total_width, availWidth)
-        return (self.width, self.height)
-    
-    def draw(self):
-        """Отрисовывает элементы в одной строке."""
-        canvas = self.canv
-        x = 0
-        y = 0
-        
-        for elem_type, elem in self.elements:
-            if elem_type == 'text':
-                p = Paragraph(elem, self.style)
-                w, h = p.wrap(self.availWidth - x, self.height)
-                p.drawOn(canvas, x, y + (self.height - h) / 2)
-                x += w
-            else:  # image
-                elem.drawOn(canvas, x, y + (self.height - elem.drawHeight) / 2)
-                x += elem.drawWidth
+    return elements, temp_files
 
 # ----------------------------------------------------------------------
 # 5. Основная функция конвертации
@@ -295,11 +251,11 @@ def json_to_pdf_questions_only(json_path, pdf_path):
 
         print(f"\nОбработка вопроса {q_id}")
         
-        # Вопрос с формулами в одной строке
+        # Вопрос
         question_text = f"{q_id}. {q_text}"
-        inline_q = InlineFormulaParagraph(question_text, question_style, font_name)
-        all_temp_files.extend(inline_q.temp_files)
-        story.append(inline_q)
+        q_elements, temps = create_inline_elements(question_text, question_style)
+        all_temp_files.extend(temps)
+        story.extend(q_elements)
         story.append(Spacer(1, 0.2*cm))
 
         # Варианты ответов
@@ -308,9 +264,9 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             if idx < 26:
                 letter = chr(65 + idx)
                 option_text = f"{letter}) {opt}"
-                inline_opt = InlineFormulaParagraph(option_text, option_style, font_name)
-                all_temp_files.extend(inline_opt.temp_files)
-                story.append(inline_opt)
+                opt_elements, temps = create_inline_elements(option_text, option_style)
+                all_temp_files.extend(temps)
+                story.extend(opt_elements)
                 story.append(Spacer(1, 0.1*cm))
 
         # Отступ между вопросами
@@ -336,7 +292,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             pass
 
 if __name__ == "__main__":
-    input_json = "res_fin.json"
+    input_json = "test_result_S1_random_lecture_20260519_191606.json"
     output_pdf = "questions_output.pdf"
     
     if os.path.exists(input_json):
