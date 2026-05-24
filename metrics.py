@@ -190,41 +190,67 @@ class ContentMetricsCalculator:
         if not all_chunk_terms:
             print("Предупреждение: Нет эталонных терминов в чанках")
             return set()
+            
         found_terms = set() 
         # 2. Проходим по всем вопросам
         for q in self.questions:
-            question_parts = [
-                q.get('question', ''),
-                q.get('explanation', ''),
-                q.get('correct_answer', ''),
-                q.get('expected_answer', ''),
-                *[opt.get('text', '') for opt in q.get('options', [])]
-            ]
+            question_parts = []
+            # Основной текст вопроса
+            question_text = q.get('question', '')
+            if isinstance(question_text, str):
+                question_parts.append(question_text)
         
+  
+            explanation = q.get('explanation', '')
+            if isinstance(explanation, str):
+                question_parts.append(explanation)
+        
+        # Правильный ответ (буква или текст)
+            correct_answer = q.get('correct_answer', '')
+            if isinstance(correct_answer, str):
+                question_parts.append(correct_answer)
+        # Варианты ответов (список строк)
+            options = q.get('options', [])
+            if isinstance(options, list):
+                for opt in options:
+                    if isinstance(opt, str):
+                        question_parts.append(opt)
+                    elif isinstance(opt, dict):
+                        opt_text = opt.get('text', '') or opt.get('answer', '')
+                        if opt_text:
+                            question_parts.append(opt_text)
+            
             full_text = ' '.join(question_parts)
             normalized_text = self._normalize_question_text(full_text)
         
-        # 3. Ищем каждый эталонный термин
+        # 3. Ищем каждый эталонный термин в тексте
             for term in all_chunk_terms:
                 normalized_term = self._normalize_term(term)
-            
-            # Поиск с учетом границ слова
-                if re.search(rf'\b{re.escape(normalized_term)}\b', normalized_text):
+                if not normalized_term:
+                    continue
+                pattern = r'\b' + re.escape(normalized_term) + r'\b'
+                if re.search(pattern, normalized_text):
                     found_terms.add(term)
-            # Для длинных терминов - поиск по корню
-                elif len(normalized_term) > 6:
+                    continue
+            
+                if len(normalized_term) >= 6:
                     root = normalized_term[:6]
-                    if re.search(rf'\b{re.escape(root)}\w*\b', normalized_text):
+                    root_pattern = r'\b' + re.escape(root) + r'\w*\b'
+                    if re.search(root_pattern, normalized_text):
                         found_terms.add(term)
+                        
+        coverage_percent = (len(found_terms) / len(all_chunk_terms) * 100) if all_chunk_terms else 0
+        print(f"🔍 Найдено терминов в тесте: {len(found_terms)} из {len(all_chunk_terms)} ({coverage_percent:.1f}%)")
     
-        print(f"Найдено терминов: {len(found_terms)} / {len(all_chunk_terms)}")
-    
-    # Для отладки: показываем ненайденные термины
-        if len(found_terms) < len(all_chunk_terms):
-            missing = all_chunk_terms - found_terms
-            print(f" Не охвачено терминов: {len(missing)}")
-        # print(f"   Примеры пропущенных: {list(missing)[:5]}")
+        missing_terms = all_chunk_terms - found_terms
+        if missing_terms and len(missing_terms) > 0:
+            print(f"Не охвачено терминов: {len(missing_terms)}")
+        
         return found_terms
+    
+
+            
+     
     
     def calculate_term_coverage(self) -> float:
         """
