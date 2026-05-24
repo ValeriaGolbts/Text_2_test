@@ -181,22 +181,19 @@ class ContentMetricsCalculator:
     
     def extract_terms_from_test(self) -> Set[str]:
         """Извлекает ключевые термины из вопросов теста"""
-    # Получаем эталонный список терминов из чанков
-    all_chunk_terms = self.extract_all_terms()
-    
-    if not all_chunk_terms:
-        print("Нет терминов в чанках")
-        return set()
-    
-    found_terms = set()
-    
-    for q in self.questions:
-        # Собираем весь текст вопроса
-        question_text = q.get('question', '').lower()
-        explanation = q.get('explanation', '').lower()
-        correct_answer = q.get('correct_answer', '').lower()
-        expected_answer = q.get('expected_answer', '').lower()
+        # Получаем эталонный список терминов из чанков
+        all_chunk_terms = self.extract_all_terms()
+        if not all_chunk_terms:
+            print("Нет терминов в чанках")
+            return set()
+        found_terms = set()
         
+        for q in self.questions:
+            # Собираем весь текст вопроса
+            question_text = q.get('question', '').lower()
+            explanation = q.get('explanation', '').lower()
+            correct_answer = q.get('correct_answer', '').lower()
+            expected_answer = q.get('expected_answer', '').lower()
         all_text = f"{question_text} {explanation} {correct_answer} {expected_answer}"
         
         # Ищем каждый эталонный термин в тексте вопроса
@@ -214,9 +211,8 @@ class ContentMetricsCalculator:
             # Можно добавить стемминг или лемматизацию
             if self._fuzzy_match_term(normalized_term, all_text):
                 found_terms.add(term)
-    
-    print(f"Терминов из чанков найдено в тесте: {len(found_terms)} из {len(all_chunk_terms)}")
-    return found_terms
+        print(f"Терминов из чанков найдено в тесте: {len(found_terms)} из {len(all_chunk_terms)}")
+        return found_terms
     
     def calculate_term_coverage(self) -> float:
         """
