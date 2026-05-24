@@ -300,7 +300,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             pass
 
 if __name__ == "__main__":
-    input_json = "test_result_S1_random_lecture_20260519_191606.json"
+    input_json = "res_fin.json"
     output_pdf = "questions_output.pdf"
     
     if os.path.exists(input_json):
