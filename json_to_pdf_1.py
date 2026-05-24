@@ -45,32 +45,29 @@ def register_cyrillic_font():
     return 'Helvetica'
 
 # ----------------------------------------------------------------------
-# 2. Конвертация LaTeX-формулы в PNG-изображение (ИСПРАВЛЕННАЯ)
+# 2. Конвертация LaTeX-формулы в PNG-изображение (УВЕЛИЧЕННЫЙ РАЗМЕР)
 # ----------------------------------------------------------------------
-def latex_to_image(latex_expr, dpi=150, fontsize=14):
+def latex_to_image(latex_expr, dpi=200, fontsize=16):
     """
     Преобразует строку с LaTeX (без ограничителей $) в PNG и возвращает
-    объект ReportLab Image.
+    объект ReportLab Image с увеличенным размером.
     """
     # Временный файл для изображения
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_path = tmp.name
 
-    # НЕ ЭКРАНИРУЕМ обратные слеши - matplotlib сам их обработает
-    # latex_expr уже содержит правильные LaTeX-команды из JSON
-    
-    # Создаем фигуру
-    fig, ax = plt.subplots(figsize=(6, 0.8))
+    # Создаем фигуру большего размера
+    fig, ax = plt.subplots(figsize=(8, 1.2))  # Увеличиваем размер фигуры
     ax.axis('off')
     
     # Формируем полную LaTeX-строку
     latex_string = f"${latex_expr}$"
     
     try:
-        # Пробуем отобразить формулу
+        # Отображаем формулу с увеличенным шрифтом
         ax.text(0.5, 0.5, latex_string, 
                 ha='center', va='center', 
-                fontsize=fontsize,
+                fontsize=fontsize,  # Увеличенный шрифт
                 transform=ax.transAxes)
     except Exception as e:
         print(f"Ошибка рендеринга формулы: {e}")
@@ -81,18 +78,18 @@ def latex_to_image(latex_expr, dpi=150, fontsize=14):
                 fontsize=fontsize,
                 transform=ax.transAxes)
     
-    # Сохраняем изображение
+    # Сохраняем с высоким разрешением
     plt.savefig(tmp_path, dpi=dpi, bbox_inches='tight', 
-                pad_inches=0.1, transparent=True,
+                pad_inches=0.15, transparent=True,
                 format='png')
     plt.close(fig)
 
-    # Создаём объект Image reportlab
+    # Создаём объект Image reportlab с увеличенными размерами
     img = Image(tmp_path)
-    # Масштабируем изображение
-    aspect = img.drawWidth / img.drawHeight if img.drawHeight > 0 else 1
-    img.drawHeight = 0.5 * cm
-    img.drawWidth = 0.5 * cm * aspect
+    
+    # Увеличиваем размер изображения в PDF
+    img.drawHeight = 0.8 * cm  # Было 0.5, стало 0.8
+    img.drawWidth = img.drawWidth * (0.8 / 0.5) if img.drawHeight > 0 else 3 * cm  # Пропорционально увеличиваем ширину
     img.hAlign = 'LEFT'
     
     return img, tmp_path
@@ -132,10 +129,11 @@ def split_text_and_formulas(text):
 # ----------------------------------------------------------------------
 # 4. Создание списка элементов для PDF из разбитой строки
 # ----------------------------------------------------------------------
-def parse_content_to_flowables(content, base_style):
+def parse_content_to_flowables(content, base_style, is_inline=False):
     """
     Принимает строку с возможными формулами $...$.
     Возвращает список flowable элементов (Paragraph для текста, Image для формул).
+    is_inline - если True, формулы будут меньшего размера для встраивания в текст
     """
     elements = []
     parts = split_text_and_formulas(content)
@@ -153,10 +151,16 @@ def parse_content_to_flowables(content, base_style):
                 elements.append(Paragraph(clean_text, base_style))
         else:  # latex
             try:
-                img, tmp_path = latex_to_image(value)
+                # Для инлайн формул используем меньший размер
+                if is_inline:
+                    img, tmp_path = latex_to_image(value, dpi=150, fontsize=12)
+                    img.drawHeight = 0.6 * cm
+                else:
+                    img, tmp_path = latex_to_image(value)
+                
                 temp_files.append(tmp_path)
                 elements.append(img)
-                elements.append(Spacer(1, 0.1*cm))
+                elements.append(Spacer(1, 0.15*cm))  # Немного увеличенный отступ
             except Exception as e:
                 print(f"Ошибка при конвертации формулы '{value}': {e}")
                 # В случае ошибки показываем формулу как текст
@@ -184,28 +188,28 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         'Base', 
         parent=styles['Normal'], 
         fontName=font_name,
-        fontSize=11, 
-        leading=14,
+        fontSize=12,  # Увеличиваем базовый шрифт
+        leading=16,   # Увеличиваем межстрочный интервал
         encoding='utf-8'
     )
     
     question_style = ParagraphStyle(
         'Question', 
         parent=base_style, 
-        fontSize=12, 
-        leading=16,
-        spaceAfter=8, 
-        spaceBefore=12,
+        fontSize=14,  # Увеличиваем шрифт вопросов
+        leading=18,
+        spaceAfter=10, 
+        spaceBefore=14,
         fontName=font_name
     )
     
     option_style = ParagraphStyle(
         'Option', 
         parent=base_style, 
-        fontSize=11, 
-        leading=14,
-        leftIndent=20, 
-        spaceAfter=4,
+        fontSize=12,  # Увеличиваем шрифт вариантов
+        leading=16,
+        leftIndent=25,  # Увеличиваем отступ
+        spaceAfter=6,
         fontName=font_name
     )
 
@@ -227,13 +231,14 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         title_style = ParagraphStyle(
             'Title', 
             parent=base_style, 
-            fontSize=16,
-            spaceAfter=12, 
+            fontSize=18,  # Увеличиваем шрифт заголовка
+            leading=22,
+            spaceAfter=16, 
             fontName=font_name,
             alignment=1  # Центрирование
         )
         story.append(Paragraph(test_title, title_style))
-        story.append(Spacer(1, 0.5*cm))
+        story.append(Spacer(1, 0.8*cm))  # Увеличиваем отступ
 
     # Обработка вопросов
     for q in questions:
@@ -244,7 +249,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
 
         # Вопрос
         full_question = f"{q_id}. {q_text}"
-        print(f"Обработка вопроса {q_id}: {full_question[:50]}...")
+        print(f"Обработка вопроса {q_id}...")
         q_elements, temps = parse_content_to_flowables(full_question, question_style)
         all_temp_files.extend(temps)
         story.extend(q_elements)
@@ -255,12 +260,13 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             if idx < 26:  # Только буквы A-Z
                 letter = chr(65 + idx)
                 opt_text = f"{letter}) {opt}"
-                opt_elements, temps = parse_content_to_flowables(opt_text, option_style)
+                # Для вариантов ответов используем инлайн режим
+                opt_elements, temps = parse_content_to_flowables(opt_text, option_style, is_inline=True)
                 all_temp_files.extend(temps)
                 story.extend(opt_elements)
 
         # Отступ между вопросами
-        story.append(Spacer(1, 0.5*cm))
+        story.append(Spacer(1, 0.8*cm))  # Увеличиваем отступ
 
     # Сборка PDF
     try:
@@ -278,7 +284,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             pass
 
 if __name__ == "__main__":
-    input_json = "res_fin.json"
+    input_json = "test_result_S1_random_lecture_20260519_191606.json"
     output_pdf = "questions_output.pdf"
     
     if os.path.exists(input_json):
