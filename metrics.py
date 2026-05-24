@@ -181,29 +181,42 @@ class ContentMetricsCalculator:
     
     def extract_terms_from_test(self) -> Set[str]:
         """Извлекает ключевые термины из вопросов теста"""
-        terms = set()
+    # Получаем эталонный список терминов из чанков
+    all_chunk_terms = self.extract_all_terms()
+    
+    if not all_chunk_terms:
+        print("Нет терминов в чанках")
+        return set()
+    
+    found_terms = set()
+    
+    for q in self.questions:
+        # Собираем весь текст вопроса
+        question_text = q.get('question', '').lower()
+        explanation = q.get('explanation', '').lower()
+        correct_answer = q.get('correct_answer', '').lower()
+        expected_answer = q.get('expected_answer', '').lower()
         
-        # Список математических терминов для поиска
-        math_terms = [
-            'функция', 'производная', 'интеграл', 'предел', 'ряд', 'матрица',
-            'вектор', 'уравнение', 'неравенство', 'множество', 'число',
-            'комплексный', 'действительный', 'мнимый', 'модуль', 'аргумент',
-            'корень', 'степень', 'логарифм', 'экспонента', 'тригонометрический',
-            'синус', 'косинус', 'тангенс', 'первообразная', 'дифференцирование',
-            'интегрирование', 'сходимость', 'последовательность'
-        ]
+        all_text = f"{question_text} {explanation} {correct_answer} {expected_answer}"
         
-        for q in self.questions:
-            question_text = q.get('question', '').lower()
-            explanation = q.get('explanation', '').lower()
-            all_text = f"{question_text} {explanation}"
+        # Ищем каждый эталонный термин в тексте вопроса
+        for term in all_chunk_terms:
+            # Используем нормализацию и поиск с учетом границ слов
+            normalized_term = self._normalize_term(term)
             
-            for term in math_terms:
-                if term in all_text:
-                    terms.add(term)
-        
-        print(f" Терминов в тесте: {len(terms)}")
-        return terms
+            # Варианты поиска:
+            # 1. Простой поиск подстроки (текущий подход)
+            if normalized_term in all_text:
+                found_terms.add(term)
+                continue
+            
+            # 2. Поиск с учетом словоформ (более продвинутый)
+            # Можно добавить стемминг или лемматизацию
+            if self._fuzzy_match_term(normalized_term, all_text):
+                found_terms.add(term)
+    
+    print(f"Терминов из чанков найдено в тесте: {len(found_terms)} из {len(all_chunk_terms)}")
+    return found_terms
     
     def calculate_term_coverage(self) -> float:
         """
