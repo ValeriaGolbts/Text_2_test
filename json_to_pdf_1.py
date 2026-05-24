@@ -11,6 +11,8 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+import matplotlib
+matplotlib.use('Agg')  # Используем неинтерактивный backend
 import matplotlib.pyplot as plt
 
 # ----------------------------------------------------------------------
@@ -43,9 +45,9 @@ def register_cyrillic_font():
     return 'Helvetica'
 
 # ----------------------------------------------------------------------
-# 2. Конвертация LaTeX-формулы в PNG-изображение
+# 2. Конвертация LaTeX-формулы в PNG-изображение (исправленная)
 # ----------------------------------------------------------------------
-def latex_to_image(latex_expr, dpi=100, fontsize=14):
+def latex_to_image(latex_expr, dpi=150, fontsize=14):
     """
     Преобразует строку с LaTeX (без ограничителей $) в PNG и возвращает
     объект ReportLab Image.
@@ -54,26 +56,43 @@ def latex_to_image(latex_expr, dpi=100, fontsize=14):
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_path = tmp.name
 
-    # Настраиваем matplotlib для отображения формулы без осей
-    plt.rc('text', usetex=False)
-    plt.rc('mathtext', fontset='stix')
-    fig, ax = plt.subplots(figsize=(1, 0.5))
-    ax.set_axis_off()
-    # Отображаем формулу
-    fig.text(0.5, 0.5, f"${latex_expr}$", 
-             ha='center', va='center', fontsize=fontsize, 
-             math_fontfamily='dejavuserif')
-    # Обрезаем лишние поля
-    fig.tight_layout(pad=0)
-    # Сохраняем с прозрачным фоном
-    fig.savefig(tmp_path, dpi=dpi, transparent=True, bbox_inches='tight', pad_inches=0.02)
+    # Экранируем специальные символы для matplotlib
+    # Заменяем нижние подчеркивания в LaTeX-выражениях
+    latex_expr = latex_expr.replace('\\', '\\\\')  # Экранируем обратные слеши
+    
+    # Создаем фигуру с правильными настройками
+    fig, ax = plt.subplots(figsize=(len(latex_expr) * 0.3, 0.8))
+    ax.axis('off')
+    
+    # Отображаем формулу с правильным форматированием
+    try:
+        # Пробуем отобразить как есть
+        text = ax.text(0.5, 0.5, f"${latex_expr}$", 
+                      ha='center', va='center', 
+                      fontsize=fontsize,
+                      transform=ax.transAxes)
+    except:
+        # Если не получается, пробуем упрощенный вариант
+        simple_expr = latex_expr.replace('_', '')
+        text = ax.text(0.5, 0.5, f"${simple_expr}$", 
+                      ha='center', va='center', 
+                      fontsize=fontsize,
+                      transform=ax.transAxes)
+    
+    # Сохраняем с высоким качеством
+    plt.savefig(tmp_path, dpi=dpi, bbox_inches='tight', 
+                pad_inches=0.1, transparent=True,
+                format='png')
     plt.close(fig)
 
     # Создаём объект Image reportlab
     img = Image(tmp_path)
-    img.drawHeight = img.drawHeight / 2.0
-    img.drawWidth = img.drawWidth / 2.0
+    # Масштабируем изображение
+    aspect = img.drawWidth / img.drawHeight if img.drawHeight > 0 else 1
+    img.drawHeight = 0.5 * cm  # Фиксированная высота
+    img.drawWidth = 0.5 * cm * aspect
     img.hAlign = 'LEFT'
+    
     return img, tmp_path
 
 # ----------------------------------------------------------------------
@@ -85,21 +104,27 @@ def split_text_and_formulas(text):
     Возвращает список кортежей ('text', строка) или ('latex', выражение).
     """
     parts = []
-    # Ищем все вхождения $...$
-    pattern = r'\$([^\$]+)\$'
+    # Ищем все вхождения $...$ (учитываем экранированные доллары)
+    pattern = r'(?<!\\)\$([^\$]+?)(?<!\\)\$'
     matches = re.finditer(pattern, text)
     last_end = 0
+    
     for m in matches:
         start, end = m.span()
         if start > last_end:
             plain_text = text[last_end:start]
             if plain_text.strip():
                 parts.append(('text', plain_text))
-        latex_expr = m.group(1)
-        parts.append(('latex', latex_expr))
+        latex_expr = m.group(1).strip()
+        if latex_expr:
+            parts.append(('latex', latex_expr))
         last_end = end
+    
     if last_end < len(text):
-        parts.append(('text', text[last_end:]))
+        remaining = text[last_end:].strip()
+        if remaining:
+            parts.append(('text', remaining))
+    
     return parts
 
 # ----------------------------------------------------------------------
@@ -113,15 +138,24 @@ def parse_content_to_flowables(content, base_style):
     elements = []
     parts = split_text_and_formulas(content)
     temp_files = []
+    
     for typ, value in parts:
         if typ == 'text':
-            if value.strip():
-                elements.append(Paragraph(value, base_style))
+            # Очищаем текст от лишних пробелов
+            clean_text = ' '.join(value.split())
+            if clean_text:
+                elements.append(Paragraph(clean_text, base_style))
         else:  # latex
-            img, tmp_path = latex_to_image(value)
-            temp_files.append(tmp_path)
-            elements.append(img)
-            elements.append(Spacer(1, 0.1*cm))
+            try:
+                img, tmp_path = latex_to_image(value)
+                temp_files.append(tmp_path)
+                elements.append(img)
+                elements.append(Spacer(1, 0.1*cm))
+            except Exception as e:
+                print(f"Ошибка при конвертации формулы '{value}': {e}")
+                # В случае ошибки показываем формулу как текст
+                elements.append(Paragraph(f"${value}$", base_style))
+    
     return elements, temp_files
 
 # ----------------------------------------------------------------------
@@ -138,35 +172,71 @@ def json_to_pdf_questions_only(json_path, pdf_path):
 
     font_name = register_cyrillic_font()
     styles = getSampleStyleSheet()
-    base_style = ParagraphStyle('Base', parent=styles['Normal'], fontName=font_name,
-                                 fontSize=11, leading=14)
-    question_style = ParagraphStyle('Question', parent=base_style, fontSize=12, leading=16,
-                                     spaceAfter=6, spaceBefore=12)
-    option_style = ParagraphStyle('Option', parent=base_style, fontSize=11, leading=14,
-                                   leftIndent=20, spaceAfter=3)
+    
+    # Создаем стили
+    base_style = ParagraphStyle(
+        'Base', 
+        parent=styles['Normal'], 
+        fontName=font_name,
+        fontSize=11, 
+        leading=14,
+        encoding='utf-8'
+    )
+    
+    question_style = ParagraphStyle(
+        'Question', 
+        parent=base_style, 
+        fontSize=12, 
+        leading=16,
+        spaceAfter=8, 
+        spaceBefore=12,
+        fontName=font_name
+    )
+    
+    option_style = ParagraphStyle(
+        'Option', 
+        parent=base_style, 
+        fontSize=11, 
+        leading=14,
+        leftIndent=20, 
+        spaceAfter=4,
+        fontName=font_name
+    )
 
-    doc = SimpleDocTemplate(pdf_path, pagesize=A4,
-                            rightMargin=2*cm, leftMargin=2*cm,
-                            topMargin=2*cm, bottomMargin=2*cm)
+    doc = SimpleDocTemplate(
+        pdf_path, 
+        pagesize=A4,
+        rightMargin=2*cm, 
+        leftMargin=2*cm,
+        topMargin=2*cm, 
+        bottomMargin=2*cm
+    )
+    
     story = []
+    all_temp_files = []
 
     # Заголовок теста (если есть)
     test_title = data.get('test_title')
     if test_title:
-        title_style = ParagraphStyle('Title', parent=base_style, fontSize=16,
-                                      spaceAfter=12)
+        title_style = ParagraphStyle(
+            'Title', 
+            parent=base_style, 
+            fontSize=16,
+            spaceAfter=12, 
+            fontName=font_name,
+            alignment=1  # Центрирование
+        )
         story.append(Paragraph(test_title, title_style))
         story.append(Spacer(1, 0.5*cm))
 
-    all_temp_files = []
-
+    # Обработка вопросов
     for q in questions:
         q_id = q.get('id', '?')
         q_text = q.get('question', '')
         if not q_text:
             continue
 
-        # Вопрос (может содержать формулы)
+        # Вопрос
         full_question = f"{q_id}. {q_text}"
         q_elements, temps = parse_content_to_flowables(full_question, question_style)
         all_temp_files.extend(temps)
@@ -175,30 +245,61 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         # Варианты ответов
         options = q.get('options', [])
         for idx, opt in enumerate(options):
-            letter = chr(65 + idx)  # A, B, C, ...
-            opt_text = f"{letter}) {opt}"
-            opt_elements, temps = parse_content_to_flowables(opt_text, option_style)
-            all_temp_files.extend(temps)
-            story.extend(opt_elements)
+            if idx < 26:  # Только буквы A-Z
+                letter = chr(65 + idx)
+                opt_text = f"{letter}) {opt}"
+                opt_elements, temps = parse_content_to_flowables(opt_text, option_style)
+                all_temp_files.extend(temps)
+                story.extend(opt_elements)
 
         # Отступ между вопросами
-        story.append(Spacer(1, 0.4*cm))
+        story.append(Spacer(1, 0.5*cm))
 
     # Сборка PDF
-    doc.build(story)
-    print(f"PDF с вопросами и формулами сохранён: {pdf_path}")
+    try:
+        doc.build(story)
+        print(f"PDF успешно создан: {pdf_path}")
+    except Exception as e:
+        print(f"Ошибка при создании PDF: {e}")
 
-    # Удаляем временные PNG-файлы
+    # Очистка временных файлов
     for f in all_temp_files:
         try:
-            os.unlink(f)
+            if os.path.exists(f):
+                os.unlink(f)
         except:
             pass
 
 if __name__ == "__main__":
+    # Создаем тестовый JSON если нужно
+    test_json = "test_questions.json"
+    if not os.path.exists(test_json):
+        # Можно создать тестовый файл с проблемными формулами
+        test_data = {
+            "test_title": "Тест по математике",
+            "questions": [
+                {
+                    "id": 2,
+                    "question": "Что означает условие Коши-Римана для функции $f(z)=u(x,y)+iv(x,y)$?",
+                    "options": [
+                        "$u_x=v_y$, $v_x=-u_y$",
+                        "$u_x=u_y$, $v_x=v_y$",
+                        "$u_x=-v_y$, $v_x=u_y$",
+                        "$u_x+v_y=0$, $v_x-u_y=0$"
+                    ]
+                }
+            ]
+        }
+        with open(test_json, 'w', encoding='utf-8') as f:
+            json.dump(test_data, f, ensure_ascii=False, indent=2)
+    
     input_json = "res_fin.json"
-    output_pdf = "questions_with_formulas.pdf"
+    output_pdf = "questions_output.pdf"
+    
     if os.path.exists(input_json):
         json_to_pdf_questions_only(input_json, output_pdf)
     else:
         print(f"Файл {input_json} не найден.")
+        print("Создаю тестовый пример...")
+        if os.path.exists(test_json):
+            json_to_pdf_questions_only(test_json, output_pdf)
