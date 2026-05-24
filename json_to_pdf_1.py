@@ -8,8 +8,9 @@ import tempfile
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm, inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import matplotlib
@@ -47,7 +48,7 @@ def register_cyrillic_font():
     return 'Helvetica'
 
 # ----------------------------------------------------------------------
-# 2. Конвертация LaTeX-формулы в PNG-изображение (УВЕЛИЧЕННЫЙ РАЗМЕР)
+# 2. Конвертация LaTeX-формулы в PNG-изображение
 # ----------------------------------------------------------------------
 def latex_to_image(latex_expr, fontsize=20):
     """
@@ -86,7 +87,7 @@ def latex_to_image(latex_expr, fontsize=20):
     # Создаём объект Image reportlab
     img = Image(tmp_path)
     
-    # Устанавливаем размер формулы в 3 раза больше текста
+    # Устанавливаем размер формулы
     target_height = 1.2 * cm  # Высота формулы
     aspect_ratio = img_width / img_height if img_height > 0 else 1
     target_width = target_height * aspect_ratio
@@ -99,6 +100,7 @@ def latex_to_image(latex_expr, fontsize=20):
     
     img.drawHeight = target_height
     img.drawWidth = target_width
+    img.hAlign = 'LEFT'
     
     return img, tmp_path
 
@@ -133,15 +135,14 @@ def split_text_and_formulas(text):
     return parts
 
 # ----------------------------------------------------------------------
-# 4. Создание элементов для отображения текста с формулами в одной строке
+# 4. Создание таблицы для inline отображения текста с формулами
 # ----------------------------------------------------------------------
-def create_inline_elements(content, style):
+def create_inline_table(content, style):
     """
-    Создает список элементов, где текст и формулы чередуются.
-    Используем таблицу для удержания элементов в одной строке.
+    Создает таблицу, где текст и формулы идут в одной строке.
     """
     parts = split_text_and_formulas(content)
-    elements = []
+    row_data = []
     temp_files = []
     
     for typ, value in parts:
@@ -151,17 +152,31 @@ def create_inline_elements(content, style):
                 clean_text = clean_text.replace('&', '&amp;')
                 clean_text = clean_text.replace('<', '&lt;')
                 clean_text = clean_text.replace('>', '&gt;')
-                elements.append(Paragraph(clean_text, style))
+                row_data.append(Paragraph(clean_text, style))
         else:  # latex
             try:
                 img, tmp_path = latex_to_image(value)
                 temp_files.append(tmp_path)
-                elements.append(img)
+                row_data.append(img)
             except Exception as e:
                 print(f"Ошибка при конвертации формулы '{value}': {e}")
-                elements.append(Paragraph(f"${value}$", style))
+                row_data.append(Paragraph(f"${value}$", style))
     
-    return elements, temp_files
+    if not row_data:
+        return [], temp_files
+    
+    # Создаем таблицу с одной строкой
+    table = Table([row_data], colWidths=None)
+    table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    
+    return [table], temp_files
 
 # ----------------------------------------------------------------------
 # 5. Основная функция конвертации
@@ -198,7 +213,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         'Question', 
         parent=text_style, 
         fontSize=12, 
-        leading=14,
+        leading=18,  # Увеличенный leading для формул
         spaceAfter=6, 
         spaceBefore=8,
         fontName=font_name
@@ -209,8 +224,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         'Option', 
         parent=text_style, 
         fontSize=12, 
-        leading=14,
-        leftIndent=20,
+        leading=18,  # Увеличенный leading для формул
         spaceAfter=3,
         fontName=font_name
     )
@@ -234,7 +248,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             'Title', 
             parent=text_style, 
             fontSize=16,
-            leading=18,
+            leading=22,
             spaceAfter=12, 
             fontName=font_name,
             alignment=TA_CENTER
@@ -249,28 +263,28 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         if not q_text:
             continue
 
-        print(f"\nОбработка вопроса {q_id}")
+        print(f"\nОбработка вопроса {q_id}: {q_text[:60]}...")
         
         # Вопрос
         question_text = f"{q_id}. {q_text}"
-        q_elements, temps = create_inline_elements(question_text, question_style)
+        q_elements, temps = create_inline_table(question_text, question_style)
         all_temp_files.extend(temps)
         story.extend(q_elements)
-        story.append(Spacer(1, 0.2*cm))
+        story.append(Spacer(1, 0.15*cm))
 
         # Варианты ответов
         options = q.get('options', [])
         for idx, opt in enumerate(options):
             if idx < 26:
                 letter = chr(65 + idx)
-                option_text = f"{letter}) {opt}"
-                opt_elements, temps = create_inline_elements(option_text, option_style)
+                option_text = f"  {letter}) {opt}"  # Добавляем отступ для выравнивания
+                opt_elements, temps = create_inline_table(option_text, option_style)
                 all_temp_files.extend(temps)
                 story.extend(opt_elements)
-                story.append(Spacer(1, 0.1*cm))
+                story.append(Spacer(1, 0.08*cm))
 
         # Отступ между вопросами
-        story.append(Spacer(1, 0.4*cm))
+        story.append(Spacer(1, 0.3*cm))
 
     # Сборка PDF
     print(f"\nСоздание PDF...")
@@ -299,3 +313,23 @@ if __name__ == "__main__":
         json_to_pdf_questions_only(input_json, output_pdf)
     else:
         print(f"Файл {input_json} не найден.")
+        # Создаем тестовый файл
+        test_data = {
+            "test_title": "Тест по математике",
+            "questions": [
+                {
+                    "id": 1,
+                    "question": "Что означает условие Коши-Римана для функции $f(z)=u(x,y)+iv(x,y)$?",
+                    "options": [
+                        "$u_x=v_y$, $v_x=-u_y$",
+                        "$u_x=u_y$, $v_x=v_y$",
+                        "$u_x=-v_y$, $v_x=u_y$",
+                        "$u_x+v_y=0$, $v_x-u_y=0$"
+                    ]
+                }
+            ]
+        }
+        with open(input_json, 'w', encoding='utf-8') as f:
+            json.dump(test_data, f, ensure_ascii=False, indent=2)
+        print(f"Создан тестовый файл: {input_json}")
+        json_to_pdf_questions_only(input_json, output_pdf)
