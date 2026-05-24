@@ -180,39 +180,52 @@ class ContentMetricsCalculator:
         return formulas
     
     def extract_terms_from_test(self) -> Set[str]:
-        """Извлекает ключевые термины из вопросов теста"""
-        # Получаем эталонный список терминов из чанков
+        """
+        Извлекает ключевые термины из вопросов теста на основе 
+        эталонного списка из чанков.
+        """
+        # 1. Получаем эталонные термины из чанков
         all_chunk_terms = self.extract_all_terms()
+    
         if not all_chunk_terms:
-            print("Нет терминов в чанках")
+            print("Предупреждение: Нет эталонных терминов в чанках")
             return set()
-        found_terms = set()
-        
+        found_terms = set() 
+        # 2. Проходим по всем вопросам
         for q in self.questions:
-            # Собираем весь текст вопроса
-            question_text = q.get('question', '').lower()
-            explanation = q.get('explanation', '').lower()
-            correct_answer = q.get('correct_answer', '').lower()
-            expected_answer = q.get('expected_answer', '').lower()
-        all_text = f"{question_text} {explanation} {correct_answer} {expected_answer}"
+            question_parts = [
+                q.get('question', ''),
+                q.get('explanation', ''),
+                q.get('correct_answer', ''),
+                q.get('expected_answer', ''),
+                *[opt.get('text', '') for opt in q.get('options', [])]
+            ]
         
-        # Ищем каждый эталонный термин в тексте вопроса
-        for term in all_chunk_terms:
-            # Используем нормализацию и поиск с учетом границ слов
-            normalized_term = self._normalize_term(term)
+            full_text = ' '.join(question_parts)
+            normalized_text = self._normalize_question_text(full_text)
+        
+        # 3. Ищем каждый эталонный термин
+            for term in all_chunk_terms:
+                normalized_term = self._normalize_term(term)
             
-            # Варианты поиска:
-            # 1. Простой поиск подстроки (текущий подход)
-            if normalized_term in all_text:
+            # Поиск с учетом границ слова
+                if re.search(rf'\b{re.escape(normalized_term)}\b', normalized_text):
                 found_terms.add(term)
-                continue
-            
-            # 2. Поиск с учетом словоформ (более продвинутый)
-            # Можно добавить стемминг или лемматизацию
-            if self._fuzzy_match_term(normalized_term, all_text):
-                found_terms.add(term)
-        print(f"Терминов из чанков найдено в тесте: {len(found_terms)} из {len(all_chunk_terms)}")
-        return found_terms
+            # Для длинных терминов - поиск по корню
+                elif len(normalized_term) > 6:
+                    root = normalized_term[:6]
+                    if re.search(rf'\b{re.escape(root)}\w*\b', normalized_text):
+                        found_terms.add(term)
+    
+    print(f"🔍 Найдено терминов: {len(found_terms)} / {len(all_chunk_terms)}")
+    
+    # Для отладки: показываем ненайденные термины
+    if len(found_terms) < len(all_chunk_terms):
+        missing = all_chunk_terms - found_terms
+        print(f" Не охвачено терминов: {len(missing)}")
+        # print(f"   Примеры пропущенных: {list(missing)[:5]}")
+    
+    return found_terms
     
     def calculate_term_coverage(self) -> float:
         """
