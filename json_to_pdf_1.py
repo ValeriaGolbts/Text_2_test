@@ -12,7 +12,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import matplotlib
-matplotlib.use('Agg')  # Используем неинтерактивный backend
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # ----------------------------------------------------------------------
@@ -45,7 +45,7 @@ def register_cyrillic_font():
     return 'Helvetica'
 
 # ----------------------------------------------------------------------
-# 2. Конвертация LaTeX-формулы в PNG-изображение (исправленная)
+# 2. Конвертация LaTeX-формулы в PNG-изображение (ИСПРАВЛЕННАЯ)
 # ----------------------------------------------------------------------
 def latex_to_image(latex_expr, dpi=150, fontsize=14):
     """
@@ -56,30 +56,32 @@ def latex_to_image(latex_expr, dpi=150, fontsize=14):
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_path = tmp.name
 
-    # Экранируем специальные символы для matplotlib
-    # Заменяем нижние подчеркивания в LaTeX-выражениях
-    latex_expr = latex_expr.replace('\\', '\\\\')  # Экранируем обратные слеши
+    # НЕ ЭКРАНИРУЕМ обратные слеши - matplotlib сам их обработает
+    # latex_expr уже содержит правильные LaTeX-команды из JSON
     
-    # Создаем фигуру с правильными настройками
-    fig, ax = plt.subplots(figsize=(len(latex_expr) * 0.3, 0.8))
+    # Создаем фигуру
+    fig, ax = plt.subplots(figsize=(6, 0.8))
     ax.axis('off')
     
-    # Отображаем формулу с правильным форматированием
-    try:
-        # Пробуем отобразить как есть
-        text = ax.text(0.5, 0.5, f"${latex_expr}$", 
-                      ha='center', va='center', 
-                      fontsize=fontsize,
-                      transform=ax.transAxes)
-    except:
-        # Если не получается, пробуем упрощенный вариант
-        simple_expr = latex_expr.replace('_', '')
-        text = ax.text(0.5, 0.5, f"${simple_expr}$", 
-                      ha='center', va='center', 
-                      fontsize=fontsize,
-                      transform=ax.transAxes)
+    # Формируем полную LaTeX-строку
+    latex_string = f"${latex_expr}$"
     
-    # Сохраняем с высоким качеством
+    try:
+        # Пробуем отобразить формулу
+        ax.text(0.5, 0.5, latex_string, 
+                ha='center', va='center', 
+                fontsize=fontsize,
+                transform=ax.transAxes)
+    except Exception as e:
+        print(f"Ошибка рендеринга формулы: {e}")
+        # Пробуем упрощенный вариант без формул
+        simple_text = re.sub(r'\$[^$]*\$', '[формула]', latex_expr)
+        ax.text(0.5, 0.5, simple_text, 
+                ha='center', va='center', 
+                fontsize=fontsize,
+                transform=ax.transAxes)
+    
+    # Сохраняем изображение
     plt.savefig(tmp_path, dpi=dpi, bbox_inches='tight', 
                 pad_inches=0.1, transparent=True,
                 format='png')
@@ -89,7 +91,7 @@ def latex_to_image(latex_expr, dpi=150, fontsize=14):
     img = Image(tmp_path)
     # Масштабируем изображение
     aspect = img.drawWidth / img.drawHeight if img.drawHeight > 0 else 1
-    img.drawHeight = 0.5 * cm  # Фиксированная высота
+    img.drawHeight = 0.5 * cm
     img.drawWidth = 0.5 * cm * aspect
     img.hAlign = 'LEFT'
     
@@ -104,8 +106,8 @@ def split_text_and_formulas(text):
     Возвращает список кортежей ('text', строка) или ('latex', выражение).
     """
     parts = []
-    # Ищем все вхождения $...$ (учитываем экранированные доллары)
-    pattern = r'(?<!\\)\$([^\$]+?)(?<!\\)\$'
+    # Ищем все вхождения $...$
+    pattern = r'\$([^$]+?)\$'
     matches = re.finditer(pattern, text)
     last_end = 0
     
@@ -144,6 +146,10 @@ def parse_content_to_flowables(content, base_style):
             # Очищаем текст от лишних пробелов
             clean_text = ' '.join(value.split())
             if clean_text:
+                # Заменяем специальные HTML-символы если есть
+                clean_text = clean_text.replace('&', '&amp;')
+                clean_text = clean_text.replace('<', '&lt;')
+                clean_text = clean_text.replace('>', '&gt;')
                 elements.append(Paragraph(clean_text, base_style))
         else:  # latex
             try:
@@ -238,6 +244,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
 
         # Вопрос
         full_question = f"{q_id}. {q_text}"
+        print(f"Обработка вопроса {q_id}: {full_question[:50]}...")
         q_elements, temps = parse_content_to_flowables(full_question, question_style)
         all_temp_files.extend(temps)
         story.extend(q_elements)
@@ -271,35 +278,10 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             pass
 
 if __name__ == "__main__":
-    # Создаем тестовый JSON если нужно
-    test_json = "test_questions.json"
-    if not os.path.exists(test_json):
-        # Можно создать тестовый файл с проблемными формулами
-        test_data = {
-            "test_title": "Тест по математике",
-            "questions": [
-                {
-                    "id": 2,
-                    "question": "Что означает условие Коши-Римана для функции $f(z)=u(x,y)+iv(x,y)$?",
-                    "options": [
-                        "$u_x=v_y$, $v_x=-u_y$",
-                        "$u_x=u_y$, $v_x=v_y$",
-                        "$u_x=-v_y$, $v_x=u_y$",
-                        "$u_x+v_y=0$, $v_x-u_y=0$"
-                    ]
-                }
-            ]
-        }
-        with open(test_json, 'w', encoding='utf-8') as f:
-            json.dump(test_data, f, ensure_ascii=False, indent=2)
-    
-    input_json = "res_fin.json"
+    input_json = "test_result_S1_random_lecture_20260519_191606.json"
     output_pdf = "questions_output.pdf"
     
     if os.path.exists(input_json):
         json_to_pdf_questions_only(input_json, output_pdf)
     else:
         print(f"Файл {input_json} не найден.")
-        print("Создаю тестовый пример...")
-        if os.path.exists(test_json):
-            json_to_pdf_questions_only(test_json, output_pdf)
