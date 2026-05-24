@@ -210,14 +210,14 @@ class ContentMetricsCalculator:
             
             # Поиск с учетом границ слова
                 if re.search(rf'\b{re.escape(normalized_term)}\b', normalized_text):
-                found_terms.add(term)
+                    found_terms.add(term)
             # Для длинных терминов - поиск по корню
                 elif len(normalized_term) > 6:
                     root = normalized_term[:6]
                     if re.search(rf'\b{re.escape(root)}\w*\b', normalized_text):
                         found_terms.add(term)
     
-    print(f"🔍 Найдено терминов: {len(found_terms)} / {len(all_chunk_terms)}")
+    print(f"Найдено терминов: {len(found_terms)} / {len(all_chunk_terms)}")
     
     # Для отладки: показываем ненайденные термины
     if len(found_terms) < len(all_chunk_terms):
