@@ -1,0 +1,376 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import json
+import os
+import re
+import tempfile
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm, inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from PIL import Image as PILImage
+
+# ----------------------------------------------------------------------
+# 1. Настройка шрифта для кириллицы
+# ----------------------------------------------------------------------
+def find_cyrillic_font():
+    possible_paths = [
+        "DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/segoeui.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/Arial.ttf",
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    return None
+
+def register_cyrillic_font():
+    font_path = find_cyrillic_font()
+    if font_path:
+        try:
+            pdfmetrics.registerFont(TTFont('CyrFont', font_path))
+            return 'CyrFont'
+        except:
+            pass
+    print("Предупреждение: не найден шрифт с кириллицей.")
+    return 'Helvetica'
+
+# ----------------------------------------------------------------------
+# 2. Конвертация LaTeX-формулы в PNG-изображение
+# ----------------------------------------------------------------------
+def latex_to_image(latex_expr, fontsize=20):
+    """
+    Преобразует строку с LaTeX в PNG и возвращает объект ReportLab Image.
+    """
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        tmp_path = tmp.name
+
+    fig, ax = plt.subplots(figsize=(6, 1.0))
+    ax.axis('off')
+    
+    latex_string = f"${latex_expr}$"
+    
+    try:
+        ax.text(0.0, 0.5, latex_string, 
+                ha='left', va='center', 
+                fontsize=fontsize,
+                transform=ax.transAxes)
+    except Exception as e:
+        print(f"Ошибка рендеринга формулы '{latex_expr}': {e}")
+        ax.text(0.0, 0.5, f"[Formula]", 
+                ha='left', va='center', 
+                fontsize=10,
+                transform=ax.transAxes)
+    
+    plt.savefig(tmp_path, dpi=200, bbox_inches='tight', 
+                pad_inches=0.05, transparent=False,
+                facecolor='white', format='png')
+    plt.close(fig)
+
+    pil_img = PILImage.open(tmp_path)
+    img_width, img_height = pil_img.size
+    
+    img = Image(tmp_path)
+    
+    target_height = 1.2 * cm
+    aspect_ratio = img_width / img_height if img_height > 0 else 1
+    target_width = target_height * aspect_ratio
+    
+    max_width = 15 * cm
+    if target_width > max_width:
+        target_width = max_width
+        target_height = target_width / aspect_ratio
+    
+    img.drawHeight = target_height
+    img.drawWidth = target_width
+    img.hAlign = 'LEFT'
+    
+    return img, tmp_path
+
+# ----------------------------------------------------------------------
+# 3. Разбиение строки на текст и формулы
+# ----------------------------------------------------------------------
+def split_text_and_formulas(text):
+    """
+    Разделяет строку на части: текст и LaTeX-выражения (внутри $...$).
+    """
+    parts = []
+    pattern = r'\$([^$]+?)\$'
+    matches = re.finditer(pattern, text)
+    last_end = 0
+    
+    for m in matches:
+        start, end = m.span()
+        if start > last_end:
+            plain_text = text[last_end:start]
+            if plain_text.strip():
+                parts.append(('text', plain_text))
+        latex_expr = m.group(1).strip()
+        if latex_expr:
+            parts.append(('latex', latex_expr))
+        last_end = end
+    
+    if last_end < len(text):
+        remaining = text[last_end:].strip()
+        if remaining:
+            parts.append(('text', remaining))
+    
+    return parts
+
+# ----------------------------------------------------------------------
+# 4. Создание таблицы для вопроса (текст с формулами inline)
+# ----------------------------------------------------------------------
+def create_question_row(content, base_style):
+    """
+    Создает таблицу для вопроса, где нумерация и текст с формулами в одной строке.
+    """
+    parts = split_text_and_formulas(content)
+    row_cells = []
+    temp_files = []
+    
+    for typ, value in parts:
+        if typ == 'text':
+            clean_text = ' '.join(value.split())
+            if clean_text:
+                clean_text = clean_text.replace('&', '&amp;')
+                clean_text = clean_text.replace('<', '&lt;')
+                clean_text = clean_text.replace('>', '&gt;')
+                p = Paragraph(clean_text, base_style)
+                row_cells.append(p)
+        else:  # latex
+            try:
+                img, tmp_path = latex_to_image(value)
+                temp_files.append(tmp_path)
+                row_cells.append(img)
+            except Exception as e:
+                print(f"Ошибка при конвертации формулы '{value}': {e}")
+                p = Paragraph(f"${value}$", base_style)
+                row_cells.append(p)
+    
+    if not row_cells:
+        return None, temp_files
+    
+    # Создаем таблицу с одной строкой
+    table = Table([row_cells], colWidths=None)
+    table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    
+    return table, temp_files
+
+# ----------------------------------------------------------------------
+# 5. Создание строки для варианта ответа (номер рядом с формулой)
+# ----------------------------------------------------------------------
+def create_option_row(letter, option_text, base_style):
+    """
+    Создает таблицу для варианта ответа, где буква варианта близко к тексту.
+    """
+    parts = split_text_and_formulas(option_text)
+    row_cells = []
+    temp_files = []
+    
+    # Добавляем букву варианта отдельной ячейкой
+    letter_style = ParagraphStyle(
+        'Letter',
+        parent=base_style,
+        spaceBefore=0,
+        spaceAfter=0,
+        leftIndent=20,  # Отступ для вариантов ответов
+    )
+    row_cells.append(Paragraph(f"{letter})", letter_style))
+    
+    for typ, value in parts:
+        if typ == 'text':
+            clean_text = ' '.join(value.split())
+            if clean_text:
+                clean_text = clean_text.replace('&', '&amp;')
+                clean_text = clean_text.replace('<', '&lt;')
+                clean_text = clean_text.replace('>', '&gt;')
+                p = Paragraph(clean_text, base_style)
+                row_cells.append(p)
+        else:  # latex
+            try:
+                img, tmp_path = latex_to_image(value)
+                temp_files.append(tmp_path)
+                row_cells.append(img)
+            except Exception as e:
+                print(f"Ошибка при конвертации формулы '{value}': {e}")
+                p = Paragraph(f"${value}$", base_style)
+                row_cells.append(p)
+    
+    if not row_cells:
+        return None, temp_files
+    
+    # Создаем таблицу с одной строкой
+    table = Table([row_cells], colWidths=None)
+    table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('LEFTPADDING', (0, 0), (0, 0), 0),  # Нет отступа у буквы
+        ('RIGHTPADDING', (0, 0), (0, 0), 2),  # Маленький отступ после буквы
+        ('LEFTPADDING', (1, 0), (-1, -1), 1),  # Маленький отступ у текста
+        ('RIGHTPADDING', (1, 0), (-1, -1), 1),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    
+    return table, temp_files
+
+# ----------------------------------------------------------------------
+# 6. Основная функция конвертации
+# ----------------------------------------------------------------------
+def json_to_pdf_questions_only(json_path, pdf_path):
+    print(f"Открытие JSON файла: {json_path}")
+    with open(json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    questions = data.get('questions')
+    if not questions:
+        print("Нет вопросов в JSON.")
+        return
+
+    print(f"Найдено вопросов: {len(questions)}")
+    
+    font_name = register_cyrillic_font()
+    print(f"Используемый шрифт: {font_name}")
+    
+    styles = getSampleStyleSheet()
+    
+    # Базовый стиль для текста
+    text_style = ParagraphStyle(
+        'Text', 
+        parent=styles['Normal'], 
+        fontName=font_name,
+        fontSize=12, 
+        leading=14,
+        encoding='utf-8',
+        spaceBefore=0,
+        spaceAfter=0,
+    )
+    
+    # Стиль для текста вопроса
+    question_style = ParagraphStyle(
+        'Question', 
+        parent=text_style, 
+        fontSize=12, 
+        leading=14,
+        spaceAfter=0,
+        spaceBefore=0,
+        fontName=font_name
+    )
+    
+    # Стиль для текста вариантов ответов
+    option_style = ParagraphStyle(
+        'Option', 
+        parent=text_style, 
+        fontSize=12, 
+        leading=14,
+        spaceAfter=0,
+        spaceBefore=0,
+        fontName=font_name
+    )
+
+    doc = SimpleDocTemplate(
+        pdf_path, 
+        pagesize=A4,
+        rightMargin=2*cm, 
+        leftMargin=2*cm,
+        topMargin=2*cm, 
+        bottomMargin=2*cm
+    )
+    
+    story = []
+    all_temp_files = []
+
+    # Заголовок теста
+    test_title = data.get('test_title')
+    if test_title:
+        title_style = ParagraphStyle(
+            'Title', 
+            parent=text_style, 
+            fontSize=16,
+            leading=18,
+            spaceAfter=8,
+            spaceBefore=0,
+            fontName=font_name,
+            alignment=TA_CENTER
+        )
+        story.append(Paragraph(test_title, title_style))
+        story.append(Spacer(1, 0.3*cm))
+
+    # Обработка вопросов
+    for q in questions:
+        q_id = q.get('id', '?')
+        q_text = q.get('question', '')
+        if not q_text:
+            continue
+
+        print(f"\nОбработка вопроса {q_id}: {q_text[:60]}...")
+        
+        # Вопрос (нумерация и текст с формулами в одной строке)
+        question_text = f"{q_id}. {q_text}"
+        table, temps = create_question_row(question_text, question_style)
+        all_temp_files.extend(temps)
+        if table:
+            story.append(table)
+
+        story.append(Spacer(1, 0.2*cm))
+
+        # Варианты ответов
+        options = q.get('options', [])
+        for idx, opt in enumerate(options):
+            if idx < 26:
+                letter = chr(65 + idx)
+                table, temps = create_option_row(letter, opt, option_style)
+                all_temp_files.extend(temps)
+                if table:
+                    story.append(table)
+                story.append(Spacer(1, 0.1*cm))
+
+        # Отступ между вопросами
+        story.append(Spacer(1, 0.4*cm))
+
+    # Сборка PDF
+    print(f"\nСоздание PDF...")
+    try:
+        doc.build(story)
+        print(f"PDF успешно создан: {pdf_path}")
+    except Exception as e:
+        print(f"Ошибка при создании PDF: {e}")
+        import traceback
+        traceback.print_exc()
+
+    # Очистка временных файлов
+    print(f"Очистка {len(all_temp_files)} временных файлов...")
+    for f in all_temp_files:
+        try:
+            if os.path.exists(f):
+                os.unlink(f)
+        except:
+            pass
+
+if __name__ == "__main__":
+    input_json = "res_fin.json"
+    output_pdf = "questions_output.pdf"
+    
+    if os.path.exists(input_json):
+        json_to_pdf_questions_only(input_json, output_pdf)
+    else:
+        print(f"Файл {input_json} не найден.")
