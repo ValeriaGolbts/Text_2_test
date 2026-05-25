@@ -310,7 +310,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             pass
 
 if __name__ == "__main__":
-    input_json = "res_fin.json"
+    input_json = "test_result_20260523_210853.json"
     output_pdf = "questions_output.pdf"
     
     if os.path.exists(input_json):
