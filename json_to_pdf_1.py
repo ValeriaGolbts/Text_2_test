@@ -47,7 +47,18 @@ def register_cyrillic_font():
     return 'Helvetica'
 
 # ----------------------------------------------------------------------
-# 2. Конвертация LaTeX-формулы в PNG-изображение
+# 2. Нормализация LaTeX-выражения (исправление двойного экранирования)
+# ----------------------------------------------------------------------
+def normalize_latex(latex_expr):
+    """
+    Нормализует LaTeX-выражение, убирая двойное экранирование.
+    """
+    # Заменяем двойные обратные слеши на одинарные
+    latex_expr = latex_expr.replace('\\\\', '\\')
+    return latex_expr
+
+# ----------------------------------------------------------------------
+# 3. Конвертация LaTeX-формулы в PNG-изображение
 # ----------------------------------------------------------------------
 def latex_to_image(latex_expr, fontsize=20):
     """
@@ -56,6 +67,9 @@ def latex_to_image(latex_expr, fontsize=20):
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_path = tmp.name
 
+    # Нормализуем LaTeX-выражение
+    latex_expr = normalize_latex(latex_expr)
+    
     fig, ax = plt.subplots(figsize=(6, 1.0))
     ax.axis('off')
     
@@ -99,7 +113,7 @@ def latex_to_image(latex_expr, fontsize=20):
     return img, tmp_path
 
 # ----------------------------------------------------------------------
-# 3. Разбиение строки на текст и формулы
+# 4. Разбиение строки на текст и формулы
 # ----------------------------------------------------------------------
 def split_text_and_formulas(text):
     """
@@ -118,6 +132,8 @@ def split_text_and_formulas(text):
                 parts.append(('text', plain_text))
         latex_expr = m.group(1).strip()
         if latex_expr:
+            # Нормализуем LaTeX перед добавлением
+            latex_expr = normalize_latex(latex_expr)
             parts.append(('latex', latex_expr))
         last_end = end
     
@@ -129,7 +145,7 @@ def split_text_and_formulas(text):
     return parts
 
 # ----------------------------------------------------------------------
-# 4. Создание элементов для отображения текста с формулами
+# 5. Создание элементов для отображения текста с формулами
 # ----------------------------------------------------------------------
 def create_inline_elements(content, style):
     """
@@ -159,7 +175,7 @@ def create_inline_elements(content, style):
     return elements, temp_files
 
 # ----------------------------------------------------------------------
-# 5. Основная функция конвертации
+# 6. Основная функция конвертации
 # ----------------------------------------------------------------------
 def json_to_pdf_questions_only(json_path, pdf_path):
     print(f"Открытие JSON файла: {json_path}")
