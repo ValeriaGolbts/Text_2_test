@@ -8,9 +8,8 @@ import tempfile
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm, inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
-from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import matplotlib
@@ -130,14 +129,14 @@ def split_text_and_formulas(text):
     return parts
 
 # ----------------------------------------------------------------------
-# 4. Создание таблицы для inline отображения
+# 4. Создание элементов для отображения текста с формулами
 # ----------------------------------------------------------------------
-def create_inline_row(content, base_style):
+def create_inline_elements(content, style):
     """
-    Создает таблицу с одной строкой, где все элементы идут inline.
+    Создает список элементов, где текст и формулы чередуются.
     """
     parts = split_text_and_formulas(content)
-    row_cells = []
+    elements = []
     temp_files = []
     
     for typ, value in parts:
@@ -147,34 +146,17 @@ def create_inline_row(content, base_style):
                 clean_text = clean_text.replace('&', '&amp;')
                 clean_text = clean_text.replace('<', '&lt;')
                 clean_text = clean_text.replace('>', '&gt;')
-                # Создаем Paragraph с минимальными отступами
-                p = Paragraph(clean_text, base_style)
-                row_cells.append(p)
+                elements.append(Paragraph(clean_text, style))
         else:  # latex
             try:
                 img, tmp_path = latex_to_image(value)
                 temp_files.append(tmp_path)
-                row_cells.append(img)
+                elements.append(img)
             except Exception as e:
                 print(f"Ошибка при конвертации формулы '{value}': {e}")
-                p = Paragraph(f"${value}$", base_style)
-                row_cells.append(p)
+                elements.append(Paragraph(f"${value}$", style))
     
-    if not row_cells:
-        return None, temp_files
-    
-    # Создаем таблицу с одной строкой
-    table = Table([row_cells], colWidths=None)
-    table.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
-        ('TOPPADDING', (0, 0), (-1, -1), 0),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-    ]))
-    
-    return table, temp_files
+    return elements, temp_files
 
 # ----------------------------------------------------------------------
 # 5. Основная функция конвертации
@@ -203,9 +185,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         fontName=font_name,
         fontSize=12, 
         leading=14,
-        encoding='utf-8',
-        spaceBefore=0,
-        spaceAfter=0,
+        encoding='utf-8'
     )
     
     # Стиль для вопроса
@@ -214,8 +194,8 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         parent=text_style, 
         fontSize=12, 
         leading=14,
-        spaceAfter=0,
-        spaceBefore=0,
+        spaceAfter=2,
+        spaceBefore=2,
         fontName=font_name
     )
     
@@ -225,8 +205,9 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         parent=text_style, 
         fontSize=12, 
         leading=14,
-        spaceAfter=0,
-        spaceBefore=0,
+        leftIndent=20,
+        spaceAfter=1,
+        spaceBefore=1,
         fontName=font_name
     )
 
@@ -250,8 +231,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             parent=text_style, 
             fontSize=16,
             leading=18,
-            spaceAfter=8,
-            spaceBefore=0,
+            spaceAfter=8, 
             fontName=font_name,
             alignment=TA_CENTER
         )
@@ -267,14 +247,12 @@ def json_to_pdf_questions_only(json_path, pdf_path):
 
         print(f"\nОбработка вопроса {q_id}: {q_text[:60]}...")
         
-        # Вопрос (все в одной строке)
+        # Вопрос
         question_text = f"{q_id}. {q_text}"
-        table, temps = create_inline_row(question_text, question_style)
+        q_elements, temps = create_inline_elements(question_text, question_style)
         all_temp_files.extend(temps)
-        if table:
-            story.append(table)
-
-        story.append(Spacer(1, 0.1*cm))
+        for elem in q_elements:
+            story.append(elem)
 
         # Варианты ответов
         options = q.get('options', [])
@@ -282,11 +260,10 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             if idx < 26:
                 letter = chr(65 + idx)
                 option_text = f"{letter}) {opt}"
-                table, temps = create_inline_row(option_text, option_style)
+                opt_elements, temps = create_inline_elements(option_text, option_style)
                 all_temp_files.extend(temps)
-                if table:
-                    story.append(table)
-                story.append(Spacer(1, 0.05*cm))
+                for elem in opt_elements:
+                    story.append(elem)
 
         # Отступ между вопросами
         story.append(Spacer(1, 0.4*cm))
@@ -311,7 +288,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             pass
 
 if __name__ == "__main__":
-    input_json = "res_fin.json"
+    input_json = "test_result_s5.json"
     output_pdf = "questions_output.pdf"
     
     if os.path.exists(input_json):
