@@ -47,13 +47,12 @@ def register_cyrillic_font():
     return 'Helvetica'
 
 # ----------------------------------------------------------------------
-# 2. Нормализация LaTeX-выражения (исправление двойного экранирования)
+# 2. Нормализация LaTeX-выражения
 # ----------------------------------------------------------------------
 def normalize_latex(latex_expr):
     """
     Нормализует LaTeX-выражение, убирая двойное экранирование.
     """
-    # Заменяем двойные обратные слеши на одинарные
     latex_expr = latex_expr.replace('\\\\', '\\')
     return latex_expr
 
@@ -62,12 +61,11 @@ def normalize_latex(latex_expr):
 # ----------------------------------------------------------------------
 def latex_to_image(latex_expr, fontsize=20):
     """
-    Преобразует строку с LaTeX в PNG и возвращает объект ReportLab Image.
+    Преобразует строку с LaTeX в PNG и возвращает путь к файлу.
     """
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_path = tmp.name
 
-    # Нормализуем LaTeX-выражение
     latex_expr = normalize_latex(latex_expr)
     
     fig, ax = plt.subplots(figsize=(6, 1.0))
@@ -132,7 +130,6 @@ def split_text_and_formulas(text):
                 parts.append(('text', plain_text))
         latex_expr = m.group(1).strip()
         if latex_expr:
-            # Нормализуем LaTeX перед добавлением
             latex_expr = normalize_latex(latex_expr)
             parts.append(('latex', latex_expr))
         last_end = end
@@ -145,34 +142,45 @@ def split_text_and_formulas(text):
     return parts
 
 # ----------------------------------------------------------------------
-# 5. Создание элементов для отображения текста с формулами
+# 5. Создание одного Paragraph с формулами как <img> тегами
 # ----------------------------------------------------------------------
-def create_inline_elements(content, style):
+def create_inline_paragraph(content, style):
     """
-    Создает список элементов, где текст и формулы чередуются.
+    Создает один Paragraph, где формулы вставлены как <img> теги.
+    Возвращает Paragraph и список временных файлов.
     """
     parts = split_text_and_formulas(content)
-    elements = []
     temp_files = []
+    paragraph_parts = []
     
     for typ, value in parts:
         if typ == 'text':
             clean_text = ' '.join(value.split())
             if clean_text:
+                # Экранируем XML-спецсимволы
                 clean_text = clean_text.replace('&', '&amp;')
                 clean_text = clean_text.replace('<', '&lt;')
                 clean_text = clean_text.replace('>', '&gt;')
-                elements.append(Paragraph(clean_text, style))
+                paragraph_parts.append(clean_text)
         else:  # latex
             try:
                 img, tmp_path = latex_to_image(value)
                 temp_files.append(tmp_path)
-                elements.append(img)
+                
+                # Создаем <img> тег с правильными размерами
+                img_tag = f'<img src="{tmp_path}" width="{img.drawWidth}" height="{img.drawHeight}" valign="middle"/>'
+                paragraph_parts.append(img_tag)
             except Exception as e:
                 print(f"Ошибка при конвертации формулы '{value}': {e}")
-                elements.append(Paragraph(f"${value}$", style))
+                paragraph_parts.append(f"${value}$")
     
-    return elements, temp_files
+    # Собираем все части в одну строку
+    full_text = ''.join(paragraph_parts)
+    
+    # Создаем Paragraph
+    para = Paragraph(full_text, style)
+    
+    return para, temp_files
 
 # ----------------------------------------------------------------------
 # 6. Основная функция конвертации
@@ -200,7 +208,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         parent=styles['Normal'], 
         fontName=font_name,
         fontSize=12, 
-        leading=14,
+        leading=18,  # Увеличен для формул
         encoding='utf-8'
     )
     
@@ -209,9 +217,9 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         'Question', 
         parent=text_style, 
         fontSize=12, 
-        leading=14,
-        spaceAfter=2,
-        spaceBefore=2,
+        leading=18,
+        spaceAfter=4,
+        spaceBefore=4,
         fontName=font_name
     )
     
@@ -220,10 +228,10 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         'Option', 
         parent=text_style, 
         fontSize=12, 
-        leading=14,
+        leading=18,
         leftIndent=20,
-        spaceAfter=1,
-        spaceBefore=1,
+        spaceAfter=2,
+        spaceBefore=2,
         fontName=font_name
     )
 
@@ -246,7 +254,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             'Title', 
             parent=text_style, 
             fontSize=16,
-            leading=18,
+            leading=22,
             spaceAfter=8, 
             fontName=font_name,
             alignment=TA_CENTER
@@ -265,10 +273,9 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         
         # Вопрос
         question_text = f"{q_id}. {q_text}"
-        q_elements, temps = create_inline_elements(question_text, question_style)
+        para, temps = create_inline_paragraph(question_text, question_style)
         all_temp_files.extend(temps)
-        for elem in q_elements:
-            story.append(elem)
+        story.append(para)
 
         # Варианты ответов
         options = q.get('options', [])
@@ -276,10 +283,9 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             if idx < 26:
                 letter = chr(65 + idx)
                 option_text = f"{letter}) {opt}"
-                opt_elements, temps = create_inline_elements(option_text, option_style)
+                para, temps = create_inline_paragraph(option_text, option_style)
                 all_temp_files.extend(temps)
-                for elem in opt_elements:
-                    story.append(elem)
+                story.append(para)
 
         # Отступ между вопросами
         story.append(Spacer(1, 0.4*cm))
