@@ -61,10 +61,10 @@ def normalize_latex(latex_expr):
 # ----------------------------------------------------------------------
 # 3. Конвертация LaTeX-формулы в PNG-изображение
 # ----------------------------------------------------------------------
-def latex_to_image(latex_expr, fontsize=20, max_width_cm=14):
+def latex_to_image(latex_expr, fontsize=28, max_width_cm=14):
     """
     Преобразует строку с LaTeX в PNG и возвращает путь к файлу.
-    Увеличенный размер формул.
+    ЗНАЧИТЕЛЬНО увеличенный размер формул.
     """
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_path = tmp.name
@@ -73,8 +73,8 @@ def latex_to_image(latex_expr, fontsize=20, max_width_cm=14):
     
     # Увеличиваем размер фигуры для сложных формул
     formula_length = len(latex_expr)
-    fig_width = min(6.0, max(3.0, formula_length * 0.15))
-    fig_height = 1.5  # Увеличена высота для более крупных формул
+    fig_width = min(7.0, max(4.0, formula_length * 0.2))
+    fig_height = 2.0  # Значительно увеличена высота
     
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     ax.axis('off')
@@ -84,7 +84,7 @@ def latex_to_image(latex_expr, fontsize=20, max_width_cm=14):
     try:
         ax.text(0.0, 0.5, latex_string, 
                 ha='left', va='center', 
-                fontsize=fontsize,  # Увеличенный размер шрифта (20)
+                fontsize=fontsize,  # Крупный размер шрифта (28)
                 transform=ax.transAxes)
     except Exception as e:
         print(f"Ошибка рендеринга формулы '{latex_expr}': {e}")
@@ -94,8 +94,8 @@ def latex_to_image(latex_expr, fontsize=20, max_width_cm=14):
                 transform=ax.transAxes)
     
     # Сохраняем с высоким DPI для лучшего качества
-    plt.savefig(tmp_path, dpi=200, bbox_inches='tight', 
-                pad_inches=0.15, transparent=False,
+    plt.savefig(tmp_path, dpi=250, bbox_inches='tight', 
+                pad_inches=0.2, transparent=False,
                 facecolor='white', format='png')
     plt.close(fig)
 
@@ -103,12 +103,12 @@ def latex_to_image(latex_expr, fontsize=20, max_width_cm=14):
     img_width, img_height = pil_img.size
     
     # Конвертируем пиксели в пункты (1 point = 1/72 inch)
-    dpi = 200
+    dpi = 250
     img_width_pt = (img_width / dpi) * 72
     img_height_pt = (img_height / dpi) * 72
     
-    # Увеличиваем максимальную высоту для inline формул
-    max_height_pt = 28  # Увеличено с 20 до 28 для более крупных формул
+    # Значительно увеличиваем максимальную высоту для inline формул
+    max_height_pt = 40  # Увеличено до 40 для крупных формул
     max_width_pt = max_width_cm * 28.35  # конвертируем cm в points
     
     if img_height_pt > max_height_pt:
@@ -164,10 +164,10 @@ def split_text_and_formulas(text):
 # ----------------------------------------------------------------------
 # 5. Создание параграфа с формулами
 # ----------------------------------------------------------------------
-def create_inline_paragraph(content, style, base_font_size=15):
+def create_inline_paragraph(content, style, base_font_size=22):
     """
     Создает Paragraph с формулами как <img> тегами.
-    Исправленная версия с правильными размерами изображений.
+    Значительно увеличенные размеры изображений.
     """
     parts = split_text_and_formulas(content)
     temp_files = []
@@ -187,8 +187,8 @@ def create_inline_paragraph(content, style, base_font_size=15):
                 paragraph_parts.append(clean_text)
         else:  # latex
             try:
-                # Создаем изображение формулы с увеличенным размером
-                img, tmp_path = latex_to_image(value, fontsize=base_font_size + 5)  # Увеличено на 5 (всего 20)
+                # Создаем изображение формулы с крупным размером
+                img, tmp_path = latex_to_image(value, fontsize=base_font_size + 6)  # Всего 28
                 temp_files.append(tmp_path)
                 
                 # Создаем <img> тег с правильными размерами
@@ -235,7 +235,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         parent=styles['Normal'], 
         fontName=font_name,
         fontSize=12, 
-        leading=24,  # Увеличенный межстрочный интервал для крупных формул
+        leading=32,  # Значительно увеличенный межстрочный интервал для крупных формул
         encoding='utf-8',
         spaceBefore=2,
         spaceAfter=2
@@ -246,9 +246,9 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         'Question', 
         parent=text_style, 
         fontSize=12, 
-        leading=24,
-        spaceAfter=6,
-        spaceBefore=6,
+        leading=32,
+        spaceAfter=8,
+        spaceBefore=8,
         fontName=font_name,
         leftIndent=0
     )
@@ -258,10 +258,10 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         'Option', 
         parent=text_style, 
         fontSize=12, 
-        leading=24,
+        leading=32,
         leftIndent=25,
-        spaceAfter=3,
-        spaceBefore=3,
+        spaceAfter=4,
+        spaceBefore=4,
         fontName=font_name
     )
 
@@ -284,8 +284,8 @@ def json_to_pdf_questions_only(json_path, pdf_path):
             'Title', 
             parent=text_style, 
             fontSize=16,
-            leading=28,
-            spaceAfter=12, 
+            leading=32,
+            spaceAfter=16, 
             fontName=font_name,
             alignment=TA_CENTER
         )
@@ -303,7 +303,7 @@ def json_to_pdf_questions_only(json_path, pdf_path):
         
         # Добавляем отступ перед вопросом (кроме первого)
         if question_idx > 0:
-            story.append(Spacer(1, 0.5*cm))
+            story.append(Spacer(1, 0.8*cm))
         
         # Вопрос
         question_text = f"{q_id}. {q_text}"
